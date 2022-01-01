@@ -4,6 +4,8 @@ project(infoviewer)
 
 add_compile_options(-Wall -ffast-math)
 
+set(CMAKE_BUILD_TYPE Debug)
+
 add_executable(
   infoviewer
   infoviewer.cpp
@@ -19,3 +21,8 @@ pkg_check_modules(SDL_GFX REQUIRED SDL_gfx)
 target_link_libraries(infoviewer ${SDL_GFX_LIBRARIES})
 target_include_directories(infoviewer PUBLIC ${SDL_GFX_INCLUDE_DIRS})
 target_compile_options(infoviewer PUBLIC ${SDL_GFX_CFLAGS_OTHER})
+
+pkg_check_modules(SDL_TTF REQUIRED SDL_ttf)
+target_link_libraries(infoviewer ${SDL_TTF_LIBRARIES})
+target_include_directories(infoviewer PUBLIC ${SDL_TTF_INCLUDE_DIRS})
+target_compile_options(infoviewer PUBLIC ${SDL_TTF_CFLAGS_OTHER})
