@@ -319,6 +319,7 @@ public:
 
 	virtual ~mqtt_feed()
 	{
+		mosquitto_destroy(mi);
 	}
 
 	void operator()()
@@ -326,7 +327,7 @@ public:
 		set_thread_name("mqtt");
 
 		for(;!do_exit;)
-			mosquitto_loop(mi, 11000, 1);
+			mosquitto_loop(mi, 500, 1);
 	}
 };
 
@@ -363,6 +364,9 @@ int main(int argc, char *argv[])
 	text_box t("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 8, 0, 0, 0, 16 * xsteps);
 	mqtt_feed mft("mauer", 1883, "minecraft-user-count", &t);
 
+	text_box t2("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 4, 0, 0, 0, 32 * xsteps);
+	mqtt_feed mft2("mauer", 1883, "vanheusden/bitcoin/bitstamp_usd", &t2);
+
 	for(;!do_exit;) {
 		if (grid) {
 			for(int cy=0; cy<n_rows; cy++)
@@ -378,6 +382,9 @@ int main(int argc, char *argv[])
 		draw_box(&sd, 0, 20, 80, 5, true, 80, 80, 255);
 		s.put_scroller(&sd, 0, 20, 80, 5);
 
+		draw_box(&sd, 17, 0, 32, 4, true, 80, 255, 80);
+		t2.put_static(&sd, 17, 0, 32, 4, true);
+
 		SDL_UpdateRect(screen, 0, 0, w, h);
 
 		usleep(10000);
@@ -385,10 +392,14 @@ int main(int argc, char *argv[])
 		SDL_Event event { 0 };
 		if (SDL_PollEvent(&event))
 		{
-			if (event.type == SDL_QUIT)
+			if (event.type == SDL_QUIT) {
+				do_exit = true;
 				break;
+			}
 		}
 	}
+
+	mosquitto_lib_cleanup();
 
 	return 0;
 }
