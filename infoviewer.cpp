@@ -53,13 +53,14 @@ private:
 	TTF_Font *font { nullptr };
 
 protected:
+	const int max_width { 0 };
 	std::mutex lock;
 	std::vector<SDL_Surface *> surfaces;
 	int total_w { 0 }, h { 0 };
 	SDL_Color col { 0, 0, 0, 0 };
 
 public:
-	container(const std::string & font_file, const int font_height)
+	container(const std::string & font_file, const int font_height, const int max_width) : max_width(max_width)
 	{
 		font = load_font(font_file, font_height, true);
 	}
@@ -109,14 +110,10 @@ public:
 	}
 };
 
-#if 0
 class text_box : public container
 {
-private:
-	SDL_Rect dest { 0, 0, 0, 0 };
-
 public:
-	text_box(const std::string & font_file, const int font_height, const int r, const int g, const int b) : container(font_file, font_height)
+	text_box(const std::string & font_file, const int font_height, const int r, const int g, const int b, const int max_width) : container(font_file, font_height, max_width)
 	{
 		col.r = r;
 		col.g = g;
@@ -127,33 +124,33 @@ public:
 	{
 	}
 
-	std::pair<int, int> set_text(const std::vector<std::string> & in) override
-	{
-		return container::set_text(text);
-	}
-
-	void put_scroller(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h)
+	void put_static(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h, const bool center)
 	{
 		lock.lock();
 
-		if (pos.w && pos.h) {
-			const int end_x = x * sd->xsteps + w * sd->xsteps;
+		int biggest_w = 0;
+		for(auto & p : surfaces)
+			biggest_w = std::max(biggest_w, p->w);
 
-			SDL_Rect dest { x * sd->xsteps + 1, y * sd->ysteps + 1, sd->xsteps * w - 2, sd->ysteps * h - 2 };
+		const int put_x = x * sd->xsteps + 1;
+		int put_y = y * sd->ysteps + 1;
+		const int put_w = w * sd->xsteps - 2;
+		int work_h = h * sd->ysteps - 2;
+		for(auto & p : surfaces) {
+			SDL_Rect dest { center ? put_x + put_w / 2 - biggest_w / 2 : put_x, put_y, put_w, p->h };
+			SDL_Rect src { 0, 0, p->w, p->h };
 
-			SDL_Rect pos_work = pos;
+			SDL_BlitSurface(p, &src, sd->screen, &dest);
 
-			while(dest.x < end_x) {
-				SDL_BlitSurface(surface, &pos_work, sd->screen, &dest);
-				dest.x += pos_work.w - pos_work.x;
-				pos_work.x = 0;
-			}
+			put_y += p->h;
+			work_h -= p->h;
+			if (work_h <= 0)
+				break;
 		}
 
 		lock.unlock();
 	}
 };
-#endif
 
 class scroller : public container
 {
@@ -163,7 +160,7 @@ private:
 	std::string text_seperator;
 
 public:
-	scroller(const std::string & font_file, const int font_height, const int r, const int g, const int b, const std::string & text_seperator) : container(font_file, font_height), text_seperator(text_seperator)
+	scroller(const std::string & font_file, const int font_height, const int r, const int g, const int b, const std::string & text_seperator, const int max_width) : container(font_file, font_height, max_width), text_seperator(text_seperator)
 	{
 		col.r = r;
 		col.g = g;
@@ -301,9 +298,11 @@ int main(int argc, char *argv[])
 	const int ysteps = h / n_rows;
 	screen_descriptor_t sd { screen, w, h, xsteps, ysteps };
 
-	scroller s("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 5, 255, 255, 255, " *** ");
+	scroller s("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 5, 255, 255, 255, " *** ", w);
+	mqtt_feed mfs("mauer", 1883, "vanheusden/sensors/huiskamer/co2", &s);
 
-	mqtt_feed mf("mauer", 1883, "vanheusden/sensors/huiskamer/co2", &s);
+	text_box t("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 8, 0, 0, 0, 16 * xsteps);
+	mqtt_feed mft("mauer", 1883, "minecraft-user-count", &t);
 
 	for(;;) {
 		if (grid) {
@@ -315,6 +314,7 @@ int main(int argc, char *argv[])
 		}
 
 		draw_box(&sd, 0, 0, 16, 8, true, 80, 255, 80);
+		t.put_static(&sd, 0, 0, 16, 8, true);
 
 		draw_box(&sd, 0, 20, 80, 5, true, 80, 80, 255);
 		s.put_scroller(&sd, 0, 20, 80, 5);
