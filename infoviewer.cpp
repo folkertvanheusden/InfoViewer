@@ -2,6 +2,7 @@
 #include <mutex>
 #include <thread>
 #include <unistd.h>
+#include <vector>
 #include <SDL/SDL.h>
 #include <SDL/SDL_gfxPrimitives.h>
 #include <SDL/SDL_image.h>
@@ -53,7 +54,8 @@ private:
 
 protected:
 	std::mutex lock;
-	SDL_Surface *surface { nullptr };
+	std::vector<SDL_Surface *> surfaces;
+	int total_w { 0 }, h { 0 };
 	SDL_Color col { 0, 0, 0, 0 };
 
 public:
@@ -64,33 +66,52 @@ public:
 
 	virtual ~container()
 	{
-		SDL_FreeSurface(surface);
+		for(auto & s : surfaces)
+			SDL_FreeSurface(s);
 	}
 
-	virtual void set_text(const std::string & text)
+	virtual std::pair<int, int> set_text(std::string text)
 	{
+		std::vector<SDL_Surface *> temp_new;
+
+		int new_total_w = 0, new_h = 0;
+
 		ttf_lock.lock();
-		SDL_Surface *temp_new = TTF_RenderUTF8_Solid(font, text.c_str(), col);
+		while(!text.empty()) {
+			std::string part = text.substr(0, 10);
+			text.erase(0, 10);
+
+			SDL_Surface *new_ = TTF_RenderUTF8_Solid(font, part.c_str(), col);
+			temp_new.push_back(new_);
+			new_total_w += new_->w;
+			new_h = std::max(new_h, new_->h);
+		}
 		ttf_lock.unlock();
 
-		if (temp_new) {
-			lock.lock();
-			SDL_Surface *temp_prev = surface;
-			surface = temp_new;
-			lock.unlock();
+		std::vector<SDL_Surface *> old;
 
-			SDL_FreeSurface(temp_prev);
-		}
-		else {
-			printf("Failed to render \"%s\": %s\n", text.c_str(), TTF_GetError());
-		}
+		lock.lock();
+
+		old = surfaces;
+
+		surfaces = temp_new;
+		total_w = new_total_w;
+		h = new_h;
+
+		lock.unlock();
+
+		for(auto & s : old)
+			SDL_FreeSurface(s);
+
+		return { total_w, h };
 	}
 };
 
+#if 0
 class text_box : public container
 {
 private:
-	SDL_Rect pos { 0, 0, 0, 0 };
+	SDL_Rect dest { 0, 0, 0, 0 };
 
 public:
 	text_box(const std::string & font_file, const int font_height, const int r, const int g, const int b) : container(font_file, font_height)
@@ -104,21 +125,16 @@ public:
 	{
 	}
 
-	void set_text(const std::string & text) override
+	std::pair<int, int> set_text(std::string text) override
 	{
-		container::set_text(text);
-
-		lock.lock();
-		pos.w = surface->w;
-		pos.h = surface->h;
-		lock.unlock();
+		return container::set_text(text);
 	}
 
 	void put_scroller(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h)
 	{
 		lock.lock();
 
-		if (surface && pos.w && pos.h) {
+		if (pos.w && pos.h) {
 			const int end_x = x * sd->xsteps + w * sd->xsteps;
 
 			SDL_Rect dest { x * sd->xsteps + 1, y * sd->ysteps + 1, sd->xsteps * w - 2, sd->ysteps * h - 2 };
@@ -135,11 +151,12 @@ public:
 		lock.unlock();
 	}
 };
+#endif
 
 class scroller : public container
 {
 private:
-	SDL_Rect pos { 0, 0, 0, 0 };
+	int render_x { 0 };
 	std::thread *th { nullptr };
 	std::string text_seperator;
 
@@ -158,34 +175,39 @@ public:
 		delete th;
 	}
 
-	void set_text(const std::string & text) override
+	std::pair<int, int> set_text(std::string text) override
 	{
-		container::set_text(text + text_seperator);
-
-		lock.lock();
-		if (surface) {
-			pos.w = surface->w;
-			pos.h = surface->h;
-		}
-		lock.unlock();
+		return container::set_text(text + text_seperator);
 	}
 
-	void put_scroller(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h)
+	void put_scroller(screen_descriptor_t *const sd, const int x, const int y, const int put_w, const int put_h)
 	{
 		lock.lock();
 
-		if (surface && pos.w && pos.h) {
-			const int end_x = x * sd->xsteps + w * sd->xsteps;
+		if (!surfaces.empty()) {
+			SDL_Rect dest { x * sd->xsteps + 1, y * sd->ysteps + 1, sd->xsteps * put_w - 2, sd->ysteps * put_h - 2 };
+			int cur_render_x = render_x;
+			int pixels_to_do = sd->xsteps * put_w - 2;
 
-			SDL_Rect dest { x * sd->xsteps + 1, y * sd->ysteps + 1, sd->xsteps * w - 2, sd->ysteps * h - 2 };
+			do {
+				for(auto & p : surfaces) {
+					if (p->w <= cur_render_x) {
+						cur_render_x -= p->w;
+						continue;
+					}
 
-			SDL_Rect pos_work = pos;
+					SDL_Rect cur_src { cur_render_x, 0, p->w - cur_render_x, h };
+					cur_render_x = 0;
 
-			while(dest.x < end_x) {
-				SDL_BlitSurface(surface, &pos_work, sd->screen, &dest);
-				dest.x += pos_work.w - pos_work.x;
-				pos_work.x = 0;
+					SDL_BlitSurface(p, &cur_src, sd->screen, &dest);
+					dest.x += cur_src.w;
+					pixels_to_do -= cur_src.w;
+
+					if (pixels_to_do <= 0)
+						break;
+				}
 			}
+			while(pixels_to_do > 0);
 		}
 
 		lock.unlock();
@@ -195,11 +217,11 @@ public:
 		for(;;) {
 			usleep(10000);
 
-			if (pos.w) {
+			if (total_w) {
 				lock.lock();
 
-				pos.x++;
-				pos.x %= pos.w;
+				render_x++;
+				render_x %= total_w;
 
 				lock.unlock();
 			}
@@ -212,9 +234,9 @@ void on_message(struct mosquitto *, void *arg, const struct mosquitto_message *m
 	container *c = (container *)arg;
 
 	std::string new_text((const char *)msg->payload, msg->payloadlen);
-	printf("on_message: %s\n", new_text.c_str());
 
-	c->set_text(new_text);
+	auto result = c->set_text(new_text);
+	printf("on_message: %s (%dx%d)\n", new_text.c_str(), result.first, result.second);
 }
 
 class mqtt_feed
@@ -273,7 +295,7 @@ int main(int argc, char *argv[])
 
 	scroller s("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 5, 255, 255, 255, " *** ");
 
-	mqtt_feed mf("mauer", 1883, "dak/update", &s);
+	mqtt_feed mf("mauer", 1883, "smartmeter", &s);
 
 	for(;;) {
 		if (grid) {
