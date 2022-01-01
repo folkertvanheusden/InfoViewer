@@ -26,3 +26,8 @@ pkg_check_modules(SDL_TTF REQUIRED SDL_ttf)
 target_link_libraries(infoviewer ${SDL_TTF_LIBRARIES})
 target_include_directories(infoviewer PUBLIC ${SDL_TTF_INCLUDE_DIRS})
 target_compile_options(infoviewer PUBLIC ${SDL_TTF_CFLAGS_OTHER})
+
+pkg_check_modules(MOSQUITTO REQUIRED libmosquitto)
+target_link_libraries(infoviewer ${MOSQUITTO_LIBRARIES})
+target_include_directories(infoviewer PUBLIC ${MOSQUITTO_INCLUDE_DIRS})
+target_compile_options(infoviewer PUBLIC ${MOSQUITTO_CFLAGS_OTHER})
