@@ -1,5 +1,8 @@
+#include <atomic>
 #include <mosquitto.h>
 #include <mutex>
+#include <signal.h>
+#include <stdarg.h>
 #include <thread>
 #include <unistd.h>
 #include <vector>
@@ -7,6 +10,41 @@
 #include <SDL/SDL_gfxPrimitives.h>
 #include <SDL/SDL_image.h>
 #include <SDL/SDL_ttf.h>
+
+std::atomic_bool do_exit { false };
+
+void sigh(int s)
+{
+	do_exit = true;
+}
+
+std::string myformat(const char *const fmt, ...)
+{
+	char *buffer = nullptr;
+        va_list ap;
+
+        va_start(ap, fmt);
+        if (vasprintf(&buffer, fmt, ap) == -1) {
+		va_end(ap);
+		return "(?)";
+	}
+        va_end(ap);
+
+	std::string result = buffer;
+	free(buffer);
+
+	return result;
+}
+
+void set_thread_name(const std::string & name)
+{
+	std::string full_name = "IV:" + name;
+
+	if (full_name.length() > 15)
+		full_name = full_name.substr(0, 15);
+
+	pthread_setname_np(pthread_self(), full_name.c_str());
+}
 
 typedef struct
 {
@@ -56,6 +94,7 @@ protected:
 	const int max_width { 0 };
 	std::mutex lock;
 	std::vector<SDL_Surface *> surfaces;
+	std::string text;
 	int total_w { 0 }, h { 0 };
 	SDL_Color col { 0, 0, 0, 0 };
 
@@ -75,6 +114,16 @@ public:
 	{
 		std::vector<SDL_Surface *> temp_new;
 
+		// new text?
+		std::string new_text;
+		for(auto t : in)
+			new_text += t;
+
+		if (new_text == text)
+			// no; don't re-render
+			return { total_w, h };
+
+		// render new text
 		int new_total_w = 0, new_h = 0;
 
 		ttf_lock.lock();
@@ -171,6 +220,7 @@ public:
 
 	virtual ~scroller()
 	{
+		th->join();
 		delete th;
 	}
 
@@ -219,7 +269,9 @@ public:
 	}
 
 	void operator()() {
-		for(;;) {
+		set_thread_name("scroller");
+
+		for(;!do_exit;) {
 			usleep(10000);
 
 			if (total_w) {
@@ -249,11 +301,12 @@ class mqtt_feed
 private:
 	std::thread *th { nullptr };
 	struct mosquitto *mi { nullptr };
+	static int nr;
 
 public:
 	mqtt_feed(const std::string & host, const int port, const std::string & topic, container *const c)
 	{
-		mi = mosquitto_new("infoviewer", true, c);
+		mi = mosquitto_new(myformat("infoviewer-%d", nr++).c_str(), true, c);
 
 		mosquitto_connect(mi, host.c_str(), port, 30);
 
@@ -270,13 +323,19 @@ public:
 
 	void operator()()
 	{
-		for(;;)
+		set_thread_name("mqtt");
+
+		for(;!do_exit;)
 			mosquitto_loop(mi, 11000, 1);
 	}
 };
 
+int mqtt_feed::nr = 0; 
+
 int main(int argc, char *argv[])
 {
+	signal(SIGTERM, sigh);
+
 	SDL_Init(SDL_INIT_VIDEO);
 	atexit(SDL_Quit);
 
@@ -304,7 +363,7 @@ int main(int argc, char *argv[])
 	text_box t("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 8, 0, 0, 0, 16 * xsteps);
 	mqtt_feed mft("mauer", 1883, "minecraft-user-count", &t);
 
-	for(;;) {
+	for(;!do_exit;) {
 		if (grid) {
 			for(int cy=0; cy<n_rows; cy++)
 				lineRGBA(screen, 0, cy * ysteps, w, cy * ysteps, 255, 255, 255, 255);
@@ -322,6 +381,13 @@ int main(int argc, char *argv[])
 		SDL_UpdateRect(screen, 0, 0, w, h);
 
 		usleep(10000);
+
+		SDL_Event event { 0 };
+		if (SDL_PollEvent(&event))
+		{
+			if (event.type == SDL_QUIT)
+				break;
+		}
 	}
 
 	return 0;
