@@ -70,21 +70,23 @@ public:
 			SDL_FreeSurface(s);
 	}
 
-	virtual std::pair<int, int> set_text(std::string text)
+	virtual std::pair<int, int> set_text(const std::vector<std::string> & in)
 	{
 		std::vector<SDL_Surface *> temp_new;
 
 		int new_total_w = 0, new_h = 0;
 
 		ttf_lock.lock();
-		while(!text.empty()) {
-			std::string part = text.substr(0, 10);
-			text.erase(0, 10);
+		for(auto text : in) {
+			while(!text.empty()) {
+				std::string part = text.substr(0, 10);
+				text.erase(0, 10);
 
-			SDL_Surface *new_ = TTF_RenderUTF8_Solid(font, part.c_str(), col);
-			temp_new.push_back(new_);
-			new_total_w += new_->w;
-			new_h = std::max(new_h, new_->h);
+				SDL_Surface *new_ = TTF_RenderUTF8_Solid(font, part.c_str(), col);
+				temp_new.push_back(new_);
+				new_total_w += new_->w;
+				new_h = std::max(new_h, new_->h);
+			}
 		}
 		ttf_lock.unlock();
 
@@ -125,7 +127,7 @@ public:
 	{
 	}
 
-	std::pair<int, int> set_text(std::string text) override
+	std::pair<int, int> set_text(const std::vector<std::string> & in) override
 	{
 		return container::set_text(text);
 	}
@@ -175,9 +177,15 @@ public:
 		delete th;
 	}
 
-	std::pair<int, int> set_text(std::string text) override
+	std::pair<int, int> set_text(const std::vector<std::string> & in) override
 	{
-		return container::set_text(text + text_seperator);
+		if (text_seperator.empty())
+			return container::set_text(in);
+	
+		std::vector<std::string> copy = in;
+		copy.push_back(text_seperator);
+
+		return container::set_text(copy);
 	}
 
 	void put_scroller(screen_descriptor_t *const sd, const int x, const int y, const int put_w, const int put_h)
@@ -235,7 +243,7 @@ void on_message(struct mosquitto *, void *arg, const struct mosquitto_message *m
 
 	std::string new_text((const char *)msg->payload, msg->payloadlen);
 
-	auto result = c->set_text(new_text);
+	auto result = c->set_text({ new_text });
 	printf("on_message: %s (%dx%d)\n", new_text.c_str(), result.first, result.second);
 }
 
@@ -295,7 +303,7 @@ int main(int argc, char *argv[])
 
 	scroller s("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 5, 255, 255, 255, " *** ");
 
-	mqtt_feed mf("mauer", 1883, "smartmeter", &s);
+	mqtt_feed mf("mauer", 1883, "vanheusden/sensors/huiskamer/co2", &s);
 
 	for(;;) {
 		if (grid) {
