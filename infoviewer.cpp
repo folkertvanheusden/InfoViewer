@@ -73,12 +73,17 @@ public:
 		SDL_Surface *temp_new = TTF_RenderUTF8_Solid(font, text.c_str(), col);
 		ttf_lock.unlock();
 
-		lock.lock();
-		SDL_Surface *temp_prev = surface;
-		surface = temp_new;
-		lock.unlock();
+		if (temp_new) {
+			lock.lock();
+			SDL_Surface *temp_prev = surface;
+			surface = temp_new;
+			lock.unlock();
 
-		SDL_FreeSurface(temp_prev);
+			SDL_FreeSurface(temp_prev);
+		}
+		else {
+			printf("Failed to render \"%s\": %s\n", text.c_str(), TTF_GetError());
+		}
 	}
 };
 
@@ -158,8 +163,10 @@ public:
 		container::set_text(text + text_seperator);
 
 		lock.lock();
-		pos.w = surface->w;
-		pos.h = surface->h;
+		if (surface) {
+			pos.w = surface->w;
+			pos.h = surface->h;
+		}
 		lock.unlock();
 	}
 
@@ -205,6 +212,7 @@ void on_message(struct mosquitto *, void *arg, const struct mosquitto_message *m
 	container *c = (container *)arg;
 
 	std::string new_text((const char *)msg->payload, msg->payloadlen);
+	printf("on_message: %s\n", new_text.c_str());
 
 	c->set_text(new_text);
 }
@@ -265,7 +273,7 @@ int main(int argc, char *argv[])
 
 	scroller s("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 5, 255, 255, 255, " *** ");
 
-	mqtt_feed mf("mauer", 1883, "dak/keep-alive", &s);
+	mqtt_feed mf("mauer", 1883, "dak/update", &s);
 
 	for(;;) {
 		if (grid) {
