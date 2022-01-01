@@ -1,0 +1,21 @@
+cmake_minimum_required(VERSION 3.7)
+
+project(infoviewer)
+
+add_compile_options(-Wall -ffast-math)
+
+add_executable(
+  infoviewer
+  infoviewer.cpp
+)
+include(FindPkgConfig)
+
+pkg_check_modules(SDL REQUIRED sdl)
+target_link_libraries(infoviewer ${SDL_LIBRARIES})
+target_include_directories(infoviewer PUBLIC ${SDL_INCLUDE_DIRS})
+target_compile_options(infoviewer PUBLIC ${SDL_CFLAGS_OTHER})
+
+pkg_check_modules(SDL_GFX REQUIRED SDL_gfx)
+target_link_libraries(infoviewer ${SDL_GFX_LIBRARIES})
+target_include_directories(infoviewer PUBLIC ${SDL_GFX_INCLUDE_DIRS})
+target_compile_options(infoviewer PUBLIC ${SDL_GFX_CFLAGS_OTHER})
