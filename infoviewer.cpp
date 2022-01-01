@@ -304,7 +304,7 @@ private:
 	static int nr;
 
 public:
-	mqtt_feed(const std::string & host, const int port, const std::string & topic, container *const c)
+	mqtt_feed(const std::string & host, const int port, const std::vector<std::string> & topics, container *const c)
 	{
 		mi = mosquitto_new(myformat("infoviewer-%d", nr++).c_str(), true, c);
 
@@ -312,7 +312,8 @@ public:
 
 		mosquitto_message_v5_callback_set(mi, on_message);
 
-		mosquitto_subscribe(mi, 0, topic.c_str(), 0);
+		for(auto & topic : topics)
+			mosquitto_subscribe(mi, 0, topic.c_str(), 0);
 
 		th = new std::thread(std::ref(*this));
 	}
@@ -359,13 +360,16 @@ int main(int argc, char *argv[])
 	screen_descriptor_t sd { screen, w, h, xsteps, ysteps };
 
 	scroller s("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 5, 255, 255, 255, " *** ", w);
-	mqtt_feed mfs("mauer", 1883, "vanheusden/sensors/huiskamer/co2", &s);
+	mqtt_feed mfs("mauer", 1883, { "vanheusden/sensors/huiskamer/co2" }, &s);
 
 	text_box t("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 8, 0, 0, 0, 16 * xsteps);
-	mqtt_feed mft("mauer", 1883, "minecraft-user-count", &t);
+	mqtt_feed mft("mauer", 1883, { "minecraft-user-count" }, &t);
 
 	text_box t2("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 4, 0, 0, 0, 32 * xsteps);
-	mqtt_feed mft2("mauer", 1883, "vanheusden/bitcoin/bitstamp_usd", &t2);
+	mqtt_feed mft2("mauer", 1883, { "vanheusden/bitcoin/bitstamp_usd" }, &t2);
+
+	text_box t3("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 4, 255, 80, 80, 16 * xsteps);
+	mqtt_feed mft3("mauer", 1883, { "dak/geozone/enter" }, &t3);
 
 	for(;!do_exit;) {
 		if (grid) {
@@ -384,6 +388,9 @@ int main(int argc, char *argv[])
 
 		draw_box(&sd, 17, 0, 32, 4, true, 80, 255, 80);
 		t2.put_static(&sd, 17, 0, 32, 4, true);
+
+		draw_box(&sd, 32, 12, 16, 4, true, 80, 80, 255);
+		t3.put_static(&sd, 17, 12, 32, 4, true);
 
 		SDL_UpdateRect(screen, 0, 0, w, h);
 
