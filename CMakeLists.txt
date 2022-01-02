@@ -10,6 +10,12 @@ add_executable(
   infoviewer
   infoviewer.cpp
 )
+
+set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+set(THREADS_PREFER_PTHREAD_FLAG TRUE)
+find_package(Threads)
+target_link_libraries(infoviewer Threads::Threads)
+
 include(FindPkgConfig)
 
 pkg_check_modules(SDL REQUIRED sdl)
@@ -21,6 +27,11 @@ pkg_check_modules(SDL_GFX REQUIRED SDL_gfx)
 target_link_libraries(infoviewer ${SDL_GFX_LIBRARIES})
 target_include_directories(infoviewer PUBLIC ${SDL_GFX_INCLUDE_DIRS})
 target_compile_options(infoviewer PUBLIC ${SDL_GFX_CFLAGS_OTHER})
+
+pkg_check_modules(SDL_IMAGE REQUIRED SDL_image)
+target_link_libraries(infoviewer ${SDL_IMAGE_LIBRARIES})
+target_include_directories(infoviewer PUBLIC ${SDL_IMAGE_INCLUDE_DIRS})
+target_compile_options(infoviewer PUBLIC ${SDL_IMAGE_CFLAGS_OTHER})
 
 pkg_check_modules(SDL_TTF REQUIRED SDL_ttf)
 target_link_libraries(infoviewer ${SDL_TTF_LIBRARIES})
