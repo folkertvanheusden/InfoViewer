@@ -180,7 +180,7 @@ typedef struct
 	int xsteps, ysteps;
 } screen_descriptor_t;
 
-void draw_box(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h, const bool border, const int r, const int g, const int b)
+void draw_box(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h, const bool border, const int r, const int g, const int b, const int b_r, const int b_g, const int b_b)
 {
 	int x1 = x * sd->xsteps;
 	int y1 = y * sd->ysteps;
@@ -188,7 +188,9 @@ void draw_box(screen_descriptor_t *const sd, const int x, const int y, const int
 	int y2 = y1 + sd->ysteps * h - 1;
 
 	boxRGBA(sd->screen, x1, y1, x2, y2, r, g, b, 255);
-	rectangleRGBA(sd->screen, x1, y1, x2, y2, r, g, b, 191);
+
+	if (border)
+		rectangleRGBA(sd->screen, x1, y1, x2, y2, b_r, b_g, b_b, 191);
 }
 
 std::mutex ttf_lock;
@@ -756,6 +758,7 @@ typedef struct {
 	container_type_t ct;
 	int font_r, font_g, font_b;
 	int bg_r, bg_g, bg_b;
+	int b_r, b_g, b_b;
 	int x, y, w, h;
 	bool border, center, bg_fill;
 } container_t;
@@ -862,6 +865,12 @@ int main(int argc, char *argv[])
 		int bg_g = atoi(bg_color_str.at(1).c_str());
 		int bg_b = atoi(bg_color_str.at(2).c_str());
 
+		std::string b_color = cfg_str(instance, "b-color", "r,g,b triple", true, "255,0,0");
+		std::vector<std::string> b_color_str = split(b_color, ",");
+		int b_r = atoi(b_color_str.at(0).c_str());
+		int b_g = atoi(b_color_str.at(1).c_str());
+		int b_b = atoi(b_color_str.at(2).c_str());
+
 		bool bg_fill = cfg_bool(instance, "bg-fill", "fill background", true, true);
 
 		int x = cfg_int(instance, "x", "x position", false, 0);
@@ -896,6 +905,9 @@ int main(int argc, char *argv[])
 		entry.bg_r = bg_r;
 		entry.bg_g = bg_g;
 		entry.bg_b = bg_b;
+		entry.b_r = b_r;
+		entry.b_g = b_g;
+		entry.b_b = b_b;
 		entry.bg_fill = bg_fill;
 		entry.x = x;
 		entry.y = y;
@@ -963,7 +975,8 @@ int main(int argc, char *argv[])
 		}
 
 		for(auto & c : containers) {
-			draw_box(&sd, c.x, c.y, c.w, c.h, c.border, c.bg_r, c.bg_g, c.bg_b);
+			if (c.bg_fill)
+				draw_box(&sd, c.x, c.y, c.w, c.h, c.border, c.bg_r, c.bg_g, c.bg_b, c.b_r, c.b_g, c.b_b);
 
 			if (c.ct == ct_static)		
 				c.c->put_static(&sd, c.x, c.y, c.w, c.h, c.center);
