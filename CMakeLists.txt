@@ -31,3 +31,8 @@ pkg_check_modules(MOSQUITTO REQUIRED libmosquitto)
 target_link_libraries(infoviewer ${MOSQUITTO_LIBRARIES})
 target_include_directories(infoviewer PUBLIC ${MOSQUITTO_INCLUDE_DIRS})
 target_compile_options(infoviewer PUBLIC ${MOSQUITTO_CFLAGS_OTHER})
+
+pkg_check_modules(JANSSON REQUIRED jansson)
+target_link_libraries(infoviewer ${JANSSON_LIBRARIES})
+target_include_directories(infoviewer PUBLIC ${JANSSON_INCLUDE_DIRS})
+target_compile_options(infoviewer PUBLIC ${JANSSON_CFLAGS_OTHER})

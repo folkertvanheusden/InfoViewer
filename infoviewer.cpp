@@ -86,6 +86,84 @@ TTF_Font * load_font(const std::string & filename, unsigned int font_height, boo
         return font;
 }
 
+class text_formatter
+{
+public:
+	text_formatter() {
+	}
+
+	virtual ~text_formatter() {
+	}
+
+	virtual std::string process(const std::string & in)
+	{
+		return in;
+	}
+};
+
+class json_formatter : public text_formatter
+{
+private:
+	const std::string format_string;
+
+public:
+	json_formatter(const std::string & format_string) : format_string(format_string) {
+	}
+
+	virtual ~json_formatter() {
+	}
+
+	std::string process(const std::string & in) override
+	{
+		json_error_t err { 0 };
+		json_t *j = json_loads(in.c_str(), JSON_DECODE_ANY | JSON_ALLOW_NUL, &err);
+		if (!j) {
+			fprintf(stderr, "json decoding of \"%s\" failed: %s\n", in.c_str(), err.text);
+			return "";
+		}
+
+		std::string out, cmd;
+		bool get_cmd = false;
+
+		for(size_t i=0; i<format_string.size(); i++) {
+			if (get_cmd) {
+				if (format_string.at(i) == '}') {
+					if (cmd.substr(0, 8) == "jsonstr:") {
+						json_t *j_obj = json_object_get(j, cmd.substr(8).c_str());
+						if (j_obj)
+							out += json_string_value(j_obj);
+					}
+					else if (cmd.substr(0, 8) == "jsonval:") {
+						json_t *j_obj = json_object_get(j, cmd.substr(8).c_str());
+						if (j_obj)
+							out += myformat("%ld", json_integer_value(j_obj));
+					}
+					else {
+						fprintf(stderr, "Format-string \"%s\" is not understood\n", cmd.c_str());
+					}
+
+					get_cmd = false;
+					cmd.clear();
+				}
+				else {
+					cmd += format_string.at(i);
+				}
+			}
+			else if (format_string.at(i) == '{')
+				get_cmd = true;
+			else {
+				out += format_string.at(i);
+			}
+		}
+
+		json_decref(j);
+
+		printf("%s\n", out.c_str());
+
+		return out;
+	}
+};
+
 class container
 {
 private:
@@ -98,9 +176,10 @@ protected:
 	std::string text;
 	int total_w { 0 }, h { 0 };
 	SDL_Color col { 0, 0, 0, 0 };
+	text_formatter *const fmt { nullptr };
 
 public:
-	container(const std::string & font_file, const int font_height, const int max_width) : max_width(max_width)
+	container(const std::string & font_file, const int font_height, const int max_width, text_formatter *const fmt) : max_width(max_width), fmt(fmt)
 	{
 		font = load_font(font_file, font_height, true);
 	}
@@ -111,14 +190,19 @@ public:
 			SDL_FreeSurface(s);
 	}
 
-	virtual std::pair<int, int> set_text(const std::vector<std::string> & in)
+	virtual std::pair<int, int> set_text(const std::vector<std::string> & in_)
 	{
 		std::vector<SDL_Surface *> temp_new;
 
+		std::vector<std::string> in;
+
 		// new text?
 		std::string new_text;
-		for(auto t : in)
-			new_text += t;
+		for(auto t : in_) {
+			auto new_t = fmt ? fmt->process(t) : t;
+			new_text += new_t;
+			in.push_back(new_t);
+		}
 
 		if (new_text == text)
 			// no; don't re-render
@@ -128,10 +212,10 @@ public:
 		int new_total_w = 0, new_h = 0;
 
 		ttf_lock.lock();
-		for(auto text : in) {
-			while(!text.empty()) {
-				std::string part = text.substr(0, 10);
-				text.erase(0, 10);
+		for(auto line : in) {
+			while(!line.empty()) {
+				std::string part = line.substr(0, 10);
+				line.erase(0, 10);
 
 				SDL_Surface *new_ = TTF_RenderUTF8_Solid(font, part.c_str(), col);
 				temp_new.push_back(new_);
@@ -163,7 +247,7 @@ public:
 class text_box : public container
 {
 public:
-	text_box(const std::string & font_file, const int font_height, const int r, const int g, const int b, const int max_width) : container(font_file, font_height, max_width)
+	text_box(const std::string & font_file, const int font_height, const int r, const int g, const int b, const int max_width, text_formatter *const fmt) : container(font_file, font_height, max_width, fmt)
 	{
 		col.r = r;
 		col.g = g;
@@ -207,10 +291,9 @@ class scroller : public container
 private:
 	int render_x { 0 };
 	std::thread *th { nullptr };
-	std::string text_seperator;
 
 public:
-	scroller(const std::string & font_file, const int font_height, const int r, const int g, const int b, const std::string & text_seperator, const int max_width) : container(font_file, font_height, max_width), text_seperator(text_seperator)
+	scroller(const std::string & font_file, const int font_height, const int r, const int g, const int b, const int max_width, text_formatter *const fmt) : container(font_file, font_height, max_width, fmt)
 	{
 		col.r = r;
 		col.g = g;
@@ -227,13 +310,7 @@ public:
 
 	std::pair<int, int> set_text(const std::vector<std::string> & in) override
 	{
-		if (text_seperator.empty())
-			return container::set_text(in);
-	
-		std::vector<std::string> copy = in;
-		copy.push_back(text_seperator);
-
-		return container::set_text(copy);
+		return container::set_text(in);
 	}
 
 	void put_scroller(screen_descriptor_t *const sd, const int x, const int y, const int put_w, const int put_h)
@@ -296,67 +373,6 @@ void on_message(struct mosquitto *, void *arg, const struct mosquitto_message *m
 	auto result = c->set_text({ new_text });
 	printf("on_message: %s (%dx%d)\n", new_text.c_str(), result.first, result.second);
 }
-
-class formatter
-{
-public:
-	formatter() {
-	}
-
-	virtual ~formatter() {
-	}
-
-	virtual std::string process(const std::string & in) = 0;
-};
-
-class json_formatter
-{
-private:
-	const std::string format_string;
-
-public:
-	json_formatter(const std::string format_string) : format_string(format_string) {
-	}
-
-	virtual ~json_formatter() {
-	}
-
-	std::string process(const std::string & in)
-	{
-		json_error_t err { 0 };
-		json_t *j = json_loads(in.c_str(), JSON_DECODE_ANY | JSON_ALLOW_NUL, &err);
-		if (!j) {
-			fprintf(stderr, "json decoding of \"%s\" failed: %s\n", in.c_str(), err.text);
-			return "";
-		}
-
-		std::string out, cmd;
-		bool get_cmd = false;
-
-		for(size_t i=0; i<in.size(); i++) {
-			if (get_cmd) {
-				if (in.at(i) == '}') {
-					json_t *j_obj = json_object_get(j, cmd.c_str());
-					if (j_obj)
-						out += json_string_value(j_obj);
-
-					get_cmd = false;
-					cmd.clear();
-				}
-				else {
-					cmd += in.at(i);
-				}
-			}
-			else if (in.at(i) == '{')
-				get_cmd = true;
-			else {
-				out += in.at(i);
-			}
-		}
-
-		json_decref(j);
-	}
-};
 
 class mqtt_feed
 {
@@ -421,16 +437,21 @@ int main(int argc, char *argv[])
 	const int ysteps = h / n_rows;
 	screen_descriptor_t sd { screen, w, h, xsteps, ysteps };
 
-	scroller s("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 5, 255, 255, 255, " *** ", w);
-	mqtt_feed mfs("mauer", 1883, { "vanheusden/sensors/huiskamer/co2" }, &s);
+	json_formatter tfmt1("icao: {jsonstr:icao}, callsign: {jsonstr:callsign}, altitude: {jsonval:alt}, speed: {jsonval:speed} *** ");
 
-	text_box t("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 8, 0, 0, 0, 16 * xsteps);
+	scroller s("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 5, 255, 255, 255, w, &tfmt1);
+	mqtt_feed mfs("mauer", 1883, { "dak/update" }, &s);
+
+	text_formatter tfmt2;
+
+	text_box t("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 8, 0, 0, 0, 16 * xsteps, &tfmt2);
 	mqtt_feed mft("mauer", 1883, { "minecraft-user-count" }, &t);
 
-	text_box t2("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 4, 0, 0, 0, 32 * xsteps);
+	text_box t2("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 4, 0, 0, 0, 32 * xsteps, &tfmt2);
 	mqtt_feed mft2("mauer", 1883, { "vanheusden/bitcoin/bitstamp_usd" }, &t2);
 
-	text_box t3("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 4, 255, 80, 80, 16 * xsteps);
+	json_formatter tfmt3("{jsonstr:callsign}");
+	text_box t3("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 4, 255, 80, 80, 16 * xsteps, &tfmt3);
 	mqtt_feed mft3("mauer", 1883, { "dak/geozone/enter" }, &t3);
 
 	for(;!do_exit;) {
