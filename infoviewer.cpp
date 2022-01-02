@@ -1,5 +1,7 @@
+#include <assert.h>
 #include <atomic>
 #include <jansson.h>
+#include <libconfig.h++>
 #include <mosquitto.h>
 #include <mutex>
 #include <signal.h>
@@ -17,6 +19,99 @@ std::atomic_bool do_exit { false };
 void sigh(int s)
 {
 	do_exit = true;
+}
+
+void error_exit(const bool se, const char *format, ...)
+{
+	int e = errno;
+	va_list ap;
+
+	va_start(ap, format);
+	char *temp = NULL;
+	if (vasprintf(&temp, format, ap) == -1)
+		puts(format);  // last resort
+	va_end(ap);
+
+	fprintf(stderr, "%s\n", temp);
+
+	if (se && e)
+		fprintf(stderr, "errno: %d (%s)\n", e, strerror(e));
+
+	free(temp);
+
+	exit(EXIT_FAILURE);
+}
+
+std::string cfg_str(const libconfig::Setting & cfg, const std::string & key, const char *descr, const bool optional, const std::string & def)
+{
+	std::string v = def;
+
+	try {
+		v = (const char *)cfg.lookup(key.c_str());
+	}
+	catch(const libconfig::SettingNotFoundException &nfex) {
+		if (!optional)
+			error_exit(false, "\"%s\" not found (%s)", key.c_str(), descr);
+	}
+	catch(const libconfig::SettingTypeException & ste) {
+		error_exit(false, "Expected a string value for \"%s\" (%s) at line %d but got something else (%s)", key.c_str(), descr, cfg.getSourceLine(), ste.what());
+	}
+
+	return v;
+}
+
+double cfg_float(const libconfig::Setting & cfg, const char *const key, const char *descr, const bool optional, const double def=-1.0)
+{
+	double v = def;
+
+	try {
+		v = cfg.lookup(key);
+	}
+	catch(const libconfig::SettingNotFoundException &nfex) {
+		if (!optional)
+			error_exit(false, "\"%s\" not found (%s)", key, descr);
+	}
+	catch(const libconfig::SettingTypeException & ste) {
+		error_exit(false, "Expected a float value for \"%s\" (%s) at line %d but got something else (did you forget to add \".0\"?)", key, descr, cfg.getSourceLine());
+	}
+
+	return v;
+}
+
+int cfg_int(const libconfig::Setting & cfg, const std::string & key, const char *descr, const bool optional, const int def=-1)
+{
+	int v = def;
+
+	try {
+		v = cfg.lookup(key.c_str());
+	}
+	catch(const libconfig::SettingNotFoundException &nfex) {
+		if (!optional)
+			error_exit(false, "\"%s\" not found (%s)", key.c_str(), descr);
+	}
+	catch(const libconfig::SettingTypeException & ste) {
+		error_exit(false, "Expected an int value for \"%s\" (%s) at line %d but got something else", key.c_str(), descr, cfg.getSourceLine());
+	}
+
+	return v;
+}
+
+int cfg_bool(const libconfig::Setting & cfg, const char *const key, const char *descr, const bool optional, const bool def=false)
+{
+	bool v = def;
+
+	try {
+		v = cfg.lookup(key);
+	}
+	catch(const libconfig::SettingNotFoundException &nfex) {
+		if (!optional)
+			error_exit(false, "\"%s\" not found (%s)", key, descr);
+	}
+	catch(const libconfig::SettingTypeException & ste) {
+		error_exit(false, "Expected a boolean value for \"%s\" (%s) but got something else", key, descr);
+	}
+
+	return v;
 }
 
 std::string myformat(const char *const fmt, ...)
@@ -272,6 +367,10 @@ public:
 
 		return { total_w, h };
 	}
+
+	virtual void put_static(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h, const bool center) = 0;
+
+	virtual void put_scroller(screen_descriptor_t *const sd, const int x, const int y, const int put_w, const int put_h) = 0;
 };
 
 class text_box : public container
@@ -341,6 +440,11 @@ public:
 	std::pair<int, int> set_text(const std::vector<std::string> & in) override
 	{
 		return container::set_text(in);
+	}
+
+	void put_static(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h, const bool center)
+	{
+		assert(0);
 	}
 
 	void put_scroller(screen_descriptor_t *const sd, const int x, const int y, const int put_w, const int put_h)
@@ -542,6 +646,17 @@ public:
 
 int mqtt_feed::nr = 0; 
 
+typedef enum { ct_static, ct_scroller } container_type_t;
+
+typedef struct {
+	container *c;
+	container_type_t ct;
+	int font_r, font_g, font_b;
+	int bg_r, bg_g, bg_b;
+	int x, y, w, h;
+	bool border, center;
+} container_t;
+
 int main(int argc, char *argv[])
 {
 	signal(SIGTERM, sigh);
@@ -553,11 +668,40 @@ int main(int argc, char *argv[])
 
 	mosquitto_lib_init();
 
+	libconfig::Config cfg;
+
+        try {
+                cfg.readFile(argv[1]);
+        }
+        catch(const libconfig::FileIOException &fioex) {
+                fprintf(stderr, "I/O error while reading configuration file %s\n", argv[1]);
+                return 1;
+        }
+        catch(const libconfig::ParseException &pex) {
+                fprintf(stderr, "Configuration file %s parse error at line %d: %s\n", pex.getFile(), pex.getLine(), pex.getError());
+                return 1;
+        }
+
+	const libconfig::Setting & root = cfg.getRoot();
+
 	int n_columns = 80, n_rows = 25;
 	bool grid = true;
 	bool full_screen = true;
 
 	int create_w = 800, create_h = 480;
+
+	{
+		const libconfig::Setting & global = root.lookup("global");
+
+		n_columns = cfg_int(global, "n-columns", "number of columns", true, 80);
+		n_rows = cfg_int(global, "n-rows", "number of rows", true, 25);
+
+		grid = cfg_bool(global, "grid", "grid", true, false);
+		full_screen = cfg_bool(global, "full-screen", "full screen", true, true);
+
+		create_w = cfg_int(global, "window-w", "when not full screen, window width", true, 800);
+		create_h = cfg_int(global, "window-h", "when not full screen, window height", true, 480);
+	}
 
 	const SDL_VideoInfo *svi = SDL_GetVideoInfo();
 	SDL_Surface *screen = SDL_SetVideoMode(create_w, create_h, 32, (svi->hw_available ? SDL_HWSURFACE : SDL_SWSURFACE) | SDL_ASYNCBLIT | (full_screen ? SDL_FULLSCREEN : 0));
@@ -567,28 +711,128 @@ int main(int argc, char *argv[])
 	const int ysteps = h / n_rows;
 	screen_descriptor_t sd { screen, w, h, xsteps, ysteps };
 
-	json_formatter tfmt1("icao: {jsonstr:icao}, callsign: {jsonstr:callsign}, altitude: {jsonval:alt}, speed: {jsonval:speed} *** ");
+	std::vector<container_t> containers;
+	std::vector<feed *> feeds;
 
-	scroller s("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 5, 255, 255, 255, w, &tfmt1);
-	mqtt_feed mfs("192.168.64.1", 1883, { "dak/update" }, &s);
+	const libconfig::Setting & instances = root["instances"];
+	size_t n_instances = instances.getLength();
 
-	text_formatter tfmt2;
+	for(size_t i=0; i<n_instances; i++) {
+		const libconfig::Setting & instance = instances[i];
 
-	text_box t("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 8, 0, 0, 0, 16 * xsteps, &tfmt2);
-	mqtt_feed mft("192.168.64.1", 1883, { "minecraft-user-count" }, &t);
+		std::string formatter_type = cfg_str(instance, "formatter", "json or text", false, "text");
+		text_formatter *tf { nullptr };
 
-	text_box t2("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 4, 0, 0, 0, 32 * xsteps, &tfmt2);
-	mqtt_feed mft2("192.168.64.1", 1883, { "vanheusden/bitcoin/bitstamp_usd" }, &t2);
+		if (formatter_type == "json") {
+			std::string format_string = cfg_str(instance, "format-string", "json", false, "");
 
-	json_formatter tfmt3("{jsonstr:callsign}");
-	text_box t3("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 4, 255, 80, 80, 16 * xsteps, &tfmt3);
-	mqtt_feed mft3("192.168.64.1", 1883, { "dak/geozone/enter" }, &t3);
+			tf = new json_formatter(format_string);
+		}
+		else if (formatter_type == "text") {
+			tf = new text_formatter();
+		}
+		else {
+			error_exit(false, "\"format-string %s\" unknown", formatter_type.c_str());
+		}
 
-	text_box t4("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 2, 0, 0, 0, 16 * xsteps, &tfmt2);
-	exec_feed eft4("/usr/bin/sensors | sed -n 's/^temp1: *+\\(.*C\\).*$/\\1/p'", 1000, &t4);
+		container *c { nullptr };
 
-	scroller s2("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 5, 0, 0, 0, w, &tfmt2);
-	tail_feed tft5("rsstail -n 1 -H -u 'https://www.nu.nl/rss' -i 300 -P", &s2);
+		std::string font = cfg_str(instance, "font", "path to font", false, "/usr/share/vlc/skins2/fonts/FreeSans.ttf");
+		int font_height = cfg_int(instance, "font-height", "font height", false, 5);
+
+		int max_width = cfg_int(instance, "max-width", "max text width", false, 5);
+
+		std::string color = cfg_str(instance, "fg-color", "r,g,b triple", true, "255,0,0");
+		std::vector<std::string> color_str = split(color, ",");
+		int fg_r = atoi(color_str.at(0).c_str());
+		int fg_g = atoi(color_str.at(1).c_str());
+		int fg_b = atoi(color_str.at(2).c_str());
+
+		std::string bg_color = cfg_str(instance, "bg-color", "r,g,b triple", true, "255,0,0");
+		std::vector<std::string> bg_color_str = split(bg_color, ",");
+		int bg_r = atoi(bg_color_str.at(0).c_str());
+		int bg_g = atoi(bg_color_str.at(1).c_str());
+		int bg_b = atoi(bg_color_str.at(2).c_str());
+
+		container_type_t ct;
+
+		std::string type = cfg_str(instance, "type", "scroller or static", false, "static");
+		if (type == "static") {
+			ct = ct_static;
+			// TODO
+		}
+		else if (type == "scroller") {
+			ct = ct_scroller;
+			c = new scroller(font, ysteps * font_height, fg_r, fg_g, fg_b, max_width * xsteps, tf);
+		}
+		else {
+			error_exit(false, "\"type %s\" unknown", type.c_str());
+		}
+
+		int x = cfg_int(instance, "x", "x position", false, 0);
+		int y = cfg_int(instance, "y", "y position", false, 0);
+		int w = cfg_int(instance, "w", "w position", false, 1);
+		int h = cfg_int(instance, "h", "h position", false, 1);
+
+		container_t entry { 0 };
+		entry.c = c;
+		entry.ct = ct;
+		entry.font_r = fg_r;
+		entry.font_g = fg_g;
+		entry.font_b = fg_b;
+		entry.bg_r = bg_r;
+		entry.bg_g = bg_g;
+		entry.bg_b = bg_b;
+		entry.x = x;
+		entry.y = y;
+		entry.w = w;
+		entry.h = h;
+		entry.border = cfg_bool(instance, "border", "border", false, true);
+		entry.center = cfg_bool(instance, "center", "center", true, true);
+		
+		containers.push_back(entry);
+
+		const libconfig::Setting & s_feed = instance["feed"];
+		std::string feed_type = cfg_str(s_feed, "feed-type", "mqtt, exec or tail", false, "mqtt");
+
+		feed *f { nullptr };
+
+		if (feed_type == "mqtt") {
+			std::string host = cfg_str(s_feed, "host", "mqtt host", false, "127.0.0.1");
+			int port = cfg_int(s_feed, "port", "mqtt port", true, 1883);
+
+			const libconfig::Setting & s_topics = s_feed["topics"];
+			size_t n_topics = s_topics.getLength();
+
+			std::vector<std::string> topics;
+
+			for(size_t i=0; i<n_topics; i++) {
+				const libconfig::Setting & s_topic = s_topics[i];
+
+				std::string topic = cfg_str(s_topic, "topic", "mqtt topic", false, "#");
+
+				topics.push_back(topic);
+			}
+
+			f = new mqtt_feed(host, port, topics, c);
+		}
+		else if (feed_type == "exec") {
+			std::string cmd = cfg_str(s_feed, "cmd", "command to invoke", false, "date");
+			int interval = cfg_int(s_feed, "interval", "exec interval (in millisecons)", true, 1000);
+
+			f = new exec_feed(cmd, interval, c);
+		}
+		else if (feed_type == "tail") {
+			std::string cmd = cfg_str(s_feed, "cmd", "command to \"tail\"", false, "tail -f /var/log/messages");
+
+			f = new tail_feed(cmd, c);
+		}
+		else {
+			error_exit(false, "\"feed-type %s\" unknown", feed_type.c_str());
+		}
+
+		feeds.push_back(f);
+	}
 
 	for(;!do_exit;) {
 		if (grid) {
@@ -599,23 +843,16 @@ int main(int argc, char *argv[])
 				lineRGBA(screen, cx * xsteps, 0, cx * xsteps, h, 255, 255, 255, 255);
 		}
 
-		draw_box(&sd, 0, 0, 16, 8, true, 80, 255, 80);
-		t.put_static(&sd, 0, 0, 16, 8, true);
+		for(auto & c : containers) {
+			draw_box(&sd, c.x, c.y, c.w, c.h, c.border, c.bg_r, c.bg_g, c.bg_b);
 
-		draw_box(&sd, 0, 20, 80, 5, true, 80, 80, 255);
-		s.put_scroller(&sd, 0, 20, 80, 5);
-
-		draw_box(&sd, 17, 0, 32, 4, true, 80, 255, 80);
-		t2.put_static(&sd, 17, 0, 32, 4, true);
-
-		draw_box(&sd, 27, 11, 26, 4, true, 80, 80, 255);
-		t3.put_static(&sd, 27, 11, 26, 4, true);
-
-		draw_box(&sd, 0, 9, 16, 2, true, 255, 80, 255);
-		t4.put_static(&sd, 0, 9, 16, 2, true);
-
-		draw_box(&sd, 0, 15, 80, 5, true, 80, 255, 40);
-		s2.put_scroller(&sd, 0, 15, 80, 5);
+			if (c.ct == ct_static)		
+				c.c->put_static(&sd, c.x, c.y, c.w, c.h, c.center);
+			else if (c.ct == ct_scroller)
+				c.c->put_scroller(&sd, c.x, c.y, c.w, c.h);
+			else
+				error_exit(false, "Internal error: unknown container type %d", c.ct);
+		}
 
 		SDL_UpdateRect(screen, 0, 0, w, h);
 

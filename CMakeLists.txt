@@ -18,6 +18,11 @@ target_link_libraries(infoviewer Threads::Threads)
 
 include(FindPkgConfig)
 
+pkg_check_modules(LIBCONFIG REQUIRED libconfig++)
+target_link_libraries(infoviewer ${LIBCONFIG_LIBRARIES})
+target_include_directories(infoviewer PUBLIC ${LIBCONFIG_INCLUDE_DIRS})
+target_compile_options(infoviewer PUBLIC ${LIBCONFIG_CFLAGS_OTHER})
+
 pkg_check_modules(SDL REQUIRED sdl)
 target_link_libraries(infoviewer ${SDL_LIBRARIES})
 target_include_directories(infoviewer PUBLIC ${SDL_INCLUDE_DIRS})
