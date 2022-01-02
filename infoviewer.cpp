@@ -61,19 +61,19 @@ std::string cfg_str(const libconfig::Setting & cfg, const std::string & key, con
 	return v;
 }
 
-double cfg_float(const libconfig::Setting & cfg, const char *const key, const char *descr, const bool optional, const double def=-1.0)
+double cfg_float(const libconfig::Setting & cfg, const std::string & key, const char *descr, const bool optional, const double def=-1.0)
 {
 	double v = def;
 
 	try {
-		v = cfg.lookup(key);
+		cfg.lookupValue(key.c_str(), v);
 	}
 	catch(const libconfig::SettingNotFoundException &nfex) {
 		if (!optional)
-			error_exit(false, "\"%s\" not found (%s)", key, descr);
+			error_exit(false, "\"%s\" not found (%s)", key.c_str(), descr);
 	}
 	catch(const libconfig::SettingTypeException & ste) {
-		error_exit(false, "Expected a float value for \"%s\" (%s) at line %d but got something else (did you forget to add \".0\"?)", key, descr, cfg.getSourceLine());
+		error_exit(false, "Expected a float value for \"%s\" (%s) at line %d but got something else (did you forget to add \".0\"?)", key.c_str(), descr, cfg.getSourceLine());
 	}
 
 	return v;
@@ -847,7 +847,7 @@ int main(int argc, char *argv[])
 		container *c { nullptr };
 
 		std::string font = cfg_str(instance, "font", "path to font", false, "/usr/share/vlc/skins2/fonts/FreeSans.ttf");
-		int font_height = cfg_int(instance, "font-height", "font height", false, 5);
+		double font_height = cfg_float(instance, "font-height", "font height", false, 5.0);
 
 		int max_width = cfg_int(instance, "max-width", "max text width", false, 5);
 
