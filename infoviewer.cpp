@@ -378,7 +378,15 @@ public:
 		for(auto t : in_) {
 			auto new_t = fmt ? fmt->process(t) : t;
 			new_text += new_t;
-			in.push_back(new_t);
+
+			std::size_t lf = new_t.find("\n");
+			if (lf != std::string::npos) {
+				std::vector<std::string> parts = split(new_t, "\n");
+				std::copy(parts.begin(), parts.end(), std::back_inserter(in));
+			}
+			else {
+				in.push_back(new_t);
+			}
 		}
 
 		if (new_text == text)
@@ -501,11 +509,6 @@ public:
 	{
 		th->join();
 		delete th;
-	}
-
-	std::pair<int, int> set_text(const std::vector<std::string> & in) override
-	{
-		return container::set_text(in);
 	}
 
 	void put_static(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h, const bool center)
