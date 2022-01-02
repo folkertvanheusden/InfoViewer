@@ -37,6 +37,36 @@ std::string myformat(const char *const fmt, ...)
 	return result;
 }
 
+std::vector<std::string> split(std::string in, std::string splitter)
+{
+	std::vector<std::string> out;
+	size_t splitter_size = splitter.size();
+
+	for(;;)
+	{
+		size_t pos = in.find(splitter);
+		if (pos == std::string::npos)
+			break;
+
+		std::string before = in.substr(0, pos);
+		out.push_back(before);
+
+		size_t bytes_left = in.size() - (pos + splitter_size);
+		if (bytes_left == 0)
+		{
+			out.push_back("");
+			return out;
+		}
+
+		in = in.substr(pos + splitter_size);
+	}
+
+	if (in.size() > 0)
+		out.push_back(in);
+
+	return out;
+}
+
 void set_thread_name(const std::string & name)
 {
 	std::string full_name = "IV:" + name;
@@ -374,15 +404,34 @@ void on_message(struct mosquitto *, void *arg, const struct mosquitto_message *m
 	printf("on_message: %s (%dx%d)\n", new_text.c_str(), result.first, result.second);
 }
 
-class mqtt_feed
+class feed
+{
+protected:
+	std::thread *th { nullptr };
+	container *const c { nullptr };
+
+public:
+	feed(container *const c) : c(c)
+	{
+	}
+
+	virtual ~feed()
+	{
+	}
+
+	virtual void operator()()
+	{
+	}
+};
+
+class mqtt_feed : public feed
 {
 private:
-	std::thread *th { nullptr };
 	struct mosquitto *mi { nullptr };
 	static int nr;
 
 public:
-	mqtt_feed(const std::string & host, const int port, const std::vector<std::string> & topics, container *const c)
+	mqtt_feed(const std::string & host, const int port, const std::vector<std::string> & topics, container *const c) : feed(c)
 	{
 		mi = mosquitto_new(myformat("infoviewer-%d", nr++).c_str(), true, c);
 
@@ -401,12 +450,55 @@ public:
 		mosquitto_destroy(mi);
 	}
 
-	void operator()()
+	void operator()() override
 	{
 		set_thread_name("mqtt");
 
 		for(;!do_exit;)
 			mosquitto_loop(mi, 500, 1);
+	}
+};
+
+class exec_feed : public feed
+{
+private:
+	const std::string cmd;
+	const int interval_ms;
+
+public:
+	exec_feed(const std::string & cmd, const int interval_ms, container *const c) : feed(c), cmd(cmd), interval_ms(interval_ms)
+	{
+		th = new std::thread(std::ref(*this));
+	}
+
+	virtual ~exec_feed()
+	{
+	}
+
+	void operator()() override
+	{
+		set_thread_name("exec");
+
+		for(;!do_exit;) {
+			char buffer[65536] { 0 };
+
+			FILE *fh = popen(cmd.c_str(), "r");
+			if (fh) {
+				if (fread(buffer, 1, sizeof buffer - 1, fh) == 0)
+					buffer[0] = 0x00;
+
+				pclose(fh);
+				printf("%s\n", buffer);
+
+				std::vector<std::string> parts = split(buffer, "\n");
+				c->set_text(parts);
+			}
+			else {
+				fprintf(stderr, "Cannot execute \"%s\"\n", cmd.c_str());
+			}
+
+			usleep(interval_ms * 1000);
+		}
 	}
 };
 
@@ -440,19 +532,22 @@ int main(int argc, char *argv[])
 	json_formatter tfmt1("icao: {jsonstr:icao}, callsign: {jsonstr:callsign}, altitude: {jsonval:alt}, speed: {jsonval:speed} *** ");
 
 	scroller s("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 5, 255, 255, 255, w, &tfmt1);
-	mqtt_feed mfs("mauer", 1883, { "dak/update" }, &s);
+	mqtt_feed mfs("192.168.64.1", 1883, { "dak/update" }, &s);
 
 	text_formatter tfmt2;
 
 	text_box t("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 8, 0, 0, 0, 16 * xsteps, &tfmt2);
-	mqtt_feed mft("mauer", 1883, { "minecraft-user-count" }, &t);
+	mqtt_feed mft("192.168.64.1", 1883, { "minecraft-user-count" }, &t);
 
 	text_box t2("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 4, 0, 0, 0, 32 * xsteps, &tfmt2);
-	mqtt_feed mft2("mauer", 1883, { "vanheusden/bitcoin/bitstamp_usd" }, &t2);
+	mqtt_feed mft2("192.168.64.1", 1883, { "vanheusden/bitcoin/bitstamp_usd" }, &t2);
 
 	json_formatter tfmt3("{jsonstr:callsign}");
 	text_box t3("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 4, 255, 80, 80, 16 * xsteps, &tfmt3);
-	mqtt_feed mft3("mauer", 1883, { "dak/geozone/enter" }, &t3);
+	mqtt_feed mft3("192.168.64.1", 1883, { "dak/geozone/enter" }, &t3);
+
+	text_box t4("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 2, 0, 0, 0, 16 * xsteps, &tfmt2);
+	exec_feed eft4("/usr/bin/sensors | sed -n 's/^Package.*  +\\(.*\\)  .*$/\\1/p'", 1000, &t4);
 
 	for(;!do_exit;) {
 		if (grid) {
@@ -472,8 +567,11 @@ int main(int argc, char *argv[])
 		draw_box(&sd, 17, 0, 32, 4, true, 80, 255, 80);
 		t2.put_static(&sd, 17, 0, 32, 4, true);
 
-		draw_box(&sd, 32, 12, 16, 4, true, 80, 80, 255);
-		t3.put_static(&sd, 32, 12, 16, 4, true);
+		draw_box(&sd, 27, 12, 26, 4, true, 80, 80, 255);
+		t3.put_static(&sd, 27, 12, 26, 4, true);
+
+		draw_box(&sd, 0, 9, 16, 2, true, 255, 80, 255);
+		t4.put_static(&sd, 0, 9, 16, 2, true);
 
 		SDL_UpdateRect(screen, 0, 0, w, h);
 
