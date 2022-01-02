@@ -52,3 +52,9 @@ pkg_check_modules(JANSSON REQUIRED jansson)
 target_link_libraries(infoviewer ${JANSSON_LIBRARIES})
 target_include_directories(infoviewer PUBLIC ${JANSSON_INCLUDE_DIRS})
 target_compile_options(infoviewer PUBLIC ${JANSSON_CFLAGS_OTHER})
+
+# set(CMAKE_INTERPROCEDURAL_OPTIMIZATION True)
+set(CMAKE_CXX_FLAGS "-Ofast")
+
+set(CMAKE_BUILD_TYPE Debug)
+add_compile_options(-Wall -pedantic)
