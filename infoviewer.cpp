@@ -739,6 +739,9 @@ int main(int argc, char *argv[])
 	const int ysteps = h / n_rows;
 	screen_descriptor_t sd { screen, w, h, xsteps, ysteps };
 
+	if (full_screen)
+		SDL_ShowCursor(SDL_DISABLE);
+
 	std::vector<container_t> containers;
 	std::vector<feed *> feeds;
 
