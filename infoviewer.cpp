@@ -433,11 +433,11 @@ public:
 class scroller : public container
 {
 private:
-	int render_x { 0 };
+	int render_x { 0 }, scroll_speed { 1 };
 	std::thread *th { nullptr };
 
 public:
-	scroller(const std::string & font_file, const int font_height, const int r, const int g, const int b, const int max_width, text_formatter *const fmt) : container(font_file, font_height, max_width, fmt)
+	scroller(const std::string & font_file, const int scroll_speed, const int font_height, const int r, const int g, const int b, const int max_width, text_formatter *const fmt) : container(font_file, font_height, max_width, fmt), scroll_speed(scroll_speed)
 	{
 		col.r = r;
 		col.g = g;
@@ -504,7 +504,7 @@ public:
 			if (total_w) {
 				lock.lock();
 
-				render_x++;
+				render_x += scroll_speed;
 				render_x %= total_w;
 
 				lock.unlock();
@@ -818,7 +818,8 @@ int main(int argc, char *argv[])
 		}
 		else if (type == "scroller") {
 			ct = ct_scroller;
-			c = new scroller(font, ysteps * font_height, fg_r, fg_g, fg_b, max_width * xsteps, tf);
+			int scroll_speed = cfg_int(instance, "scroll-speed", "pixel count", true, 1);
+			c = new scroller(font, scroll_speed, ysteps * font_height, fg_r, fg_g, fg_b, max_width * xsteps, tf);
 		}
 		else {
 			error_exit(false, "\"type %s\" unknown", type.c_str());
