@@ -913,7 +913,7 @@ int main(int argc, char *argv[])
 
 		SDL_UpdateRect(screen, 0, 0, w, h);
 
-		usleep(10000);
+		SDL_Delay(10);
 
 		SDL_Event event { 0 };
 		if (SDL_PollEvent(&event))
