@@ -776,6 +776,8 @@ int main(int argc, char *argv[])
 
 	libconfig::Config cfg;
 
+	cfg.setOptions(libconfig::Setting::Option::OptionAutoConvert);
+
         try {
                 cfg.readFile(argv[1]);
         }
