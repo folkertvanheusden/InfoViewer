@@ -256,13 +256,29 @@ public:
 				if (format_string.at(i) == '}') {
 					if (cmd.substr(0, 8) == "jsonstr:") {
 						json_t *j_obj = json_object_get(j, cmd.substr(8).c_str());
-						if (j_obj)
+						if (j_obj && json_is_string(j_obj))
 							out += json_string_value(j_obj);
+						else
+							out += "?";
 					}
 					else if (cmd.substr(0, 8) == "jsonval:") {
 						json_t *j_obj = json_object_get(j, cmd.substr(8).c_str());
-						if (j_obj)
+						if (j_obj && json_is_integer(j_obj))
 							out += myformat("%ld", json_integer_value(j_obj));
+						else
+							out += "?";
+					}
+					else if (cmd.substr(0, 9) == "jsondval:") {
+						std::vector<std::string> parts = split(cmd, ":");
+
+						int digits = atoi(parts.at(1).c_str());
+						std::string format = myformat("%%.%df", digits);
+
+						json_t *j_obj = json_object_get(j, parts.at(2).c_str());
+						if (j_obj && json_is_real(j_obj))
+							out += myformat(format.c_str(), json_real_value(j_obj));
+						else
+							out += "?";
 					}
 					else {
 						fprintf(stderr, "Format-string \"%s\" is not understood\n", cmd.c_str());
