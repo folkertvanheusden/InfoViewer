@@ -533,6 +533,34 @@ public:
 	}
 };
 
+class static_feed : public feed
+{
+private:
+	const std::vector<std::string> text;
+
+public:
+	static_feed(const std::string & text, container *const c) : feed(c), text(split(text, "\n"))
+	{
+		th = new std::thread(std::ref(*this));
+	}
+
+	virtual ~static_feed()
+	{
+		th->join();
+		delete th;
+	}
+
+	void operator()() override
+	{
+		set_thread_name("static");
+
+		for(;!do_exit;) {
+			c->set_text(text);
+			usleep(500000);
+		}
+	}
+};
+
 class mqtt_feed : public feed
 {
 private:
@@ -659,7 +687,7 @@ typedef struct {
 	int font_r, font_g, font_b;
 	int bg_r, bg_g, bg_b;
 	int x, y, w, h;
-	bool border, center;
+	bool border, center, bg_fill;
 } container_t;
 
 int main(int argc, char *argv[])
@@ -725,7 +753,7 @@ int main(int argc, char *argv[])
 	for(size_t i=0; i<n_instances; i++) {
 		const libconfig::Setting & instance = instances[i];
 
-		std::string formatter_type = cfg_str(instance, "formatter", "json or text", false, "text");
+		std::string formatter_type = cfg_str(instance, "formatter", "json or as-is", false, "as-is");
 		text_formatter *tf { nullptr };
 
 		if (formatter_type == "json") {
@@ -733,7 +761,7 @@ int main(int argc, char *argv[])
 
 			tf = new json_formatter(format_string);
 		}
-		else if (formatter_type == "text") {
+		else if (formatter_type == "as-is") {
 			tf = new text_formatter();
 		}
 		else {
@@ -758,6 +786,8 @@ int main(int argc, char *argv[])
 		int bg_r = atoi(bg_color_str.at(0).c_str());
 		int bg_g = atoi(bg_color_str.at(1).c_str());
 		int bg_b = atoi(bg_color_str.at(2).c_str());
+
+		bool bg_fill = cfg_bool(instance, "bg-fill", "fill background", true, true);
 
 		int x = cfg_int(instance, "x", "x position", false, 0);
 		int y = cfg_int(instance, "y", "y position", false, 0);
@@ -790,6 +820,7 @@ int main(int argc, char *argv[])
 		entry.bg_r = bg_r;
 		entry.bg_g = bg_g;
 		entry.bg_b = bg_b;
+		entry.bg_fill = bg_fill;
 		entry.x = x;
 		entry.y = y;
 		entry.w = w;
@@ -800,7 +831,7 @@ int main(int argc, char *argv[])
 		containers.push_back(entry);
 
 		const libconfig::Setting & s_feed = instance["feed"];
-		std::string feed_type = cfg_str(s_feed, "feed-type", "mqtt, exec or tail", false, "mqtt");
+		std::string feed_type = cfg_str(s_feed, "feed-type", "mqtt, exec, tail or static", false, "mqtt");
 
 		feed *f { nullptr };
 
@@ -833,6 +864,11 @@ int main(int argc, char *argv[])
 			std::string cmd = cfg_str(s_feed, "cmd", "command to \"tail\"", false, "tail -f /var/log/messages");
 
 			f = new tail_feed(cmd, c);
+		}
+		else if (feed_type == "static") {
+			std::string text = cfg_str(s_feed, "text", "text to display", false, "my text");
+
+			f = new static_feed(text, c);
 		}
 		else {
 			error_exit(false, "\"feed-type %s\" unknown", feed_type.c_str());
