@@ -624,14 +624,17 @@ class mqtt_feed : public feed
 {
 private:
 	struct mosquitto *mi { nullptr };
-	static int nr;
 
 public:
 	mqtt_feed(const std::string & host, const int port, const std::vector<std::string> & topics, container *const c) : feed(c)
 	{
-		mi = mosquitto_new(myformat("infoviewer-%d", nr++).c_str(), true, c);
+		mi = mosquitto_new(nullptr, true, c);
+		if (!mi)
+			error_exit(false, "Cannot crate mosquitto instance");
 
-		mosquitto_connect(mi, host.c_str(), port, 30);
+		int err = 0;
+		if ((err = mosquitto_connect(mi, host.c_str(), port, 30)) != MOSQ_ERR_SUCCESS)
+			fprintf(stderr, "mqtt failed to connect (%s)\n", mosquitto_strerror(err));
 
 		mosquitto_message_v5_callback_set(mi, on_message);
 
@@ -650,8 +653,18 @@ public:
 	{
 		set_thread_name("mqtt");
 
-		for(;!do_exit;)
-			mosquitto_loop(mi, 500, 1);
+		for(;!do_exit;) {
+			int err = 0;
+
+			if ((err = mosquitto_loop(mi, 500, 1)) != MOSQ_ERR_SUCCESS) {
+				fprintf(stderr, "mqtt error (%s), reconnecting\n", mosquitto_strerror(err));
+
+				sleep(1);
+
+				if ((err = mosquitto_reconnect(mi)) != MOSQ_ERR_SUCCESS)
+					fprintf(stderr, "mqtt reconnect failed (%s)\n", mosquitto_strerror(err));
+			}
+		}
 	}
 };
 
@@ -735,8 +748,6 @@ public:
 		pclose(fh);
 	}
 };
-
-int mqtt_feed::nr = 0; 
 
 typedef enum { ct_static, ct_scroller } container_type_t;
 
