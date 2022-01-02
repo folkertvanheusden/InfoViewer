@@ -502,6 +502,44 @@ public:
 	}
 };
 
+class tail_feed : public feed
+{
+private:
+	const std::string cmd;
+
+public:
+	tail_feed(const std::string & cmd, container *const c) : feed(c), cmd(cmd)
+	{
+		th = new std::thread(std::ref(*this));
+	}
+
+	virtual ~tail_feed()
+	{
+	}
+
+	void operator()() override
+	{
+		set_thread_name("tail");
+
+		FILE *fh = popen(cmd.c_str(), "r");
+		if (!fh)
+			fprintf(stderr, "Cannot execute \"%s\"\n", cmd.c_str());
+
+		for(;!do_exit;) {
+			char buffer[65536] { 0 };
+
+			fgets(buffer, sizeof buffer, fh);
+
+			printf("%s\n", buffer);
+
+			std::vector<std::string> parts = split(buffer, "\n");
+			c->set_text(parts);
+		}
+
+		pclose(fh);
+	}
+};
+
 int mqtt_feed::nr = 0; 
 
 int main(int argc, char *argv[])
@@ -549,6 +587,9 @@ int main(int argc, char *argv[])
 	text_box t4("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 2, 0, 0, 0, 16 * xsteps, &tfmt2);
 	exec_feed eft4("/usr/bin/sensors | sed -n 's/^Package.*  +\\(.*\\)  .*$/\\1/p'", 1000, &t4);
 
+	scroller s2("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 5, 0, 0, 0, w, &tfmt2);
+	tail_feed tft5("rsstail -n 1 -H -u 'https://www.nu.nl/rss' -i 300 -P", &s2);
+
 	for(;!do_exit;) {
 		if (grid) {
 			for(int cy=0; cy<n_rows; cy++)
@@ -567,11 +608,14 @@ int main(int argc, char *argv[])
 		draw_box(&sd, 17, 0, 32, 4, true, 80, 255, 80);
 		t2.put_static(&sd, 17, 0, 32, 4, true);
 
-		draw_box(&sd, 27, 12, 26, 4, true, 80, 80, 255);
-		t3.put_static(&sd, 27, 12, 26, 4, true);
+		draw_box(&sd, 27, 11, 26, 4, true, 80, 80, 255);
+		t3.put_static(&sd, 27, 11, 26, 4, true);
 
 		draw_box(&sd, 0, 9, 16, 2, true, 255, 80, 255);
 		t4.put_static(&sd, 0, 9, 16, 2, true);
+
+		draw_box(&sd, 0, 15, 80, 5, true, 80, 255, 40);
+		s2.put_scroller(&sd, 0, 15, 80, 5);
 
 		SDL_UpdateRect(screen, 0, 0, w, h);
 
