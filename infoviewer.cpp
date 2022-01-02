@@ -338,15 +338,10 @@ public:
 
 		ttf_lock.lock();
 		for(auto line : in) {
-			while(!line.empty()) {
-				std::string part = line.substr(0, 10);
-				line.erase(0, 10);
-
-				SDL_Surface *new_ = TTF_RenderUTF8_Blended(font, part.c_str(), col);
-				temp_new.push_back(new_);
-				new_total_w += new_->w;
-				new_h = std::max(new_h, new_->h);
-			}
+			SDL_Surface *new_ = TTF_RenderUTF8_Blended(font, line.c_str(), col);
+			temp_new.push_back(new_);
+			new_total_w += new_->w;
+			new_h = std::max(new_h, new_->h);
 		}
 		ttf_lock.unlock();
 
