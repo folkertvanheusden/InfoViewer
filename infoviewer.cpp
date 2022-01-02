@@ -2,6 +2,7 @@
 #include <atomic>
 #include <jansson.h>
 #include <libconfig.h++>
+#include <math.h>
 #include <mosquitto.h>
 #include <mutex>
 #include <signal.h>
@@ -338,10 +339,24 @@ public:
 
 		ttf_lock.lock();
 		for(auto line : in) {
-			SDL_Surface *new_ = TTF_RenderUTF8_Blended(font, line.c_str(), col);
-			temp_new.push_back(new_);
-			new_total_w += new_->w;
-			new_h = std::max(new_h, new_->h);
+			int text_w = 0, dummy = 0;
+			TTF_SizeUTF8(font, line.c_str(), &text_w, &dummy);
+
+			int divider = ceil(double(text_w) / max_width);
+			size_t n_chars = ceil(line.size() / double(divider));
+
+			for(int i=0; i<divider; i++) {
+				std::string part = line.substr(0, n_chars);
+				if (part.empty())
+					break;
+
+				line.erase(0, n_chars);
+
+				SDL_Surface *new_ = TTF_RenderUTF8_Blended(font, part.c_str(), col);
+				temp_new.push_back(new_);
+				new_total_w += new_->w;
+				new_h = std::max(new_h, new_->h);
+			}
 		}
 		ttf_lock.unlock();
 
