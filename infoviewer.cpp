@@ -319,17 +319,50 @@ protected:
 	int total_w { 0 }, h { 0 };
 	SDL_Color col { 0, 0, 0, 0 };
 	text_formatter *const fmt { nullptr };
+	const int clear_after { -1 };
+	time_t most_recent_update { 0 };
+	std::thread *th { nullptr };
 
 public:
-	container(const std::string & font_file, const int font_height, const int max_width, text_formatter *const fmt) : max_width(max_width), fmt(fmt)
+	container(const std::string & font_file, const int font_height, const int max_width, text_formatter *const fmt, const int clear_after) : max_width(max_width), fmt(fmt), clear_after(clear_after)
 	{
 		font = load_font(font_file, font_height, true);
+
+		th = new std::thread(std::ref(*this));
 	}
 
 	virtual ~container()
 	{
 		for(auto & s : surfaces)
 			SDL_FreeSurface(s);
+
+		th->join();
+		delete th;
+	}
+
+	void operator()()
+	{
+		if (clear_after != -1) {
+			for(;!do_exit;) {
+				usleep(500000);
+
+				time_t now = time(nullptr);
+				if (most_recent_update != 0 && now - most_recent_update >= clear_after) {
+					lock.lock();
+
+					std::vector<SDL_Surface *> old = surfaces;
+					surfaces.clear();
+					total_w = h = 0;
+
+					lock.unlock();
+
+					for(auto & s : old)
+						SDL_FreeSurface(s);
+
+					most_recent_update = 0;
+				}
+			}
+		}
 	}
 
 	virtual std::pair<int, int> set_text(const std::vector<std::string> & in_)
@@ -376,11 +409,9 @@ public:
 		}
 		ttf_lock.unlock();
 
-		std::vector<SDL_Surface *> old;
-
 		lock.lock();
 
-		old = surfaces;
+		std::vector<SDL_Surface *> old = surfaces;
 
 		surfaces = temp_new;
 		total_w = new_total_w;
@@ -390,6 +421,8 @@ public:
 
 		for(auto & s : old)
 			SDL_FreeSurface(s);
+
+		most_recent_update = time(nullptr);
 
 		return { total_w, h };
 	}
@@ -402,7 +435,7 @@ public:
 class text_box : public container
 {
 public:
-	text_box(const std::string & font_file, const int font_height, const int r, const int g, const int b, const int max_width, text_formatter *const fmt) : container(font_file, font_height, max_width, fmt)
+	text_box(const std::string & font_file, const int font_height, const int r, const int g, const int b, const int max_width, text_formatter *const fmt, const int clear_after) : container(font_file, font_height, max_width, fmt, clear_after)
 	{
 		col.r = r;
 		col.g = g;
@@ -453,7 +486,7 @@ private:
 	std::thread *th { nullptr };
 
 public:
-	scroller(const std::string & font_file, const int scroll_speed, const int font_height, const int r, const int g, const int b, const int max_width, text_formatter *const fmt) : container(font_file, font_height, max_width, fmt), scroll_speed(scroll_speed)
+	scroller(const std::string & font_file, const int scroll_speed, const int font_height, const int r, const int g, const int b, const int max_width, text_formatter *const fmt, const int clear_after) : container(font_file, font_height, max_width, fmt, clear_after), scroll_speed(scroll_speed)
 	{
 		col.r = r;
 		col.g = g;
@@ -804,6 +837,8 @@ int main(int argc, char *argv[])
 
 		int max_width = cfg_int(instance, "max-width", "max text width", false, 5);
 
+		int clear_after = cfg_int(instance, "clear-after", "clear text after (in seconds)", true, -1);
+
 		std::string color = cfg_str(instance, "fg-color", "r,g,b triple", true, "255,0,0");
 		std::vector<std::string> color_str = split(color, ",");
 		int fg_r = atoi(color_str.at(0).c_str());
@@ -830,12 +865,12 @@ int main(int argc, char *argv[])
 		std::string type = cfg_str(instance, "type", "scroller or static", false, "static");
 		if (type == "static") {
 			ct = ct_static;
-			c = new text_box(font, ysteps * font_height, fg_r, fg_g, fg_b, max_width * xsteps, tf);
+			c = new text_box(font, ysteps * font_height, fg_r, fg_g, fg_b, max_width * xsteps, tf, clear_after);
 		}
 		else if (type == "scroller") {
 			ct = ct_scroller;
 			int scroll_speed = cfg_int(instance, "scroll-speed", "pixel count", true, 1);
-			c = new scroller(font, scroll_speed, ysteps * font_height, fg_r, fg_g, fg_b, max_width * xsteps, tf);
+			c = new scroller(font, scroll_speed, ysteps * font_height, fg_r, fg_g, fg_b, max_width * xsteps, tf, clear_after);
 		}
 		else {
 			error_exit(false, "\"type %s\" unknown", type.c_str());
@@ -857,7 +892,7 @@ int main(int argc, char *argv[])
 		entry.h = h;
 		entry.border = cfg_bool(instance, "border", "border", false, true);
 		entry.center = center;
-		
+
 		containers.push_back(entry);
 
 		const libconfig::Setting & s_feed = instance["feed"];
