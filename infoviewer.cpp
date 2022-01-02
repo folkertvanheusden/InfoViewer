@@ -348,9 +348,9 @@ public:
 		lock.lock();
 
 		if (!surfaces.empty()) {
-			SDL_Rect dest { x * sd->xsteps + 1, y * sd->ysteps + 1, sd->xsteps * put_w - 2, sd->ysteps * put_h - 2 };
+			SDL_Rect dest { x * sd->xsteps + 1, y * sd->ysteps + 1, sd->xsteps * put_w, sd->ysteps * put_h };
 			int cur_render_x = render_x;
-			int pixels_to_do = sd->xsteps * put_w - 2;
+			int pixels_to_do = sd->xsteps * put_w;
 
 			do {
 				for(auto & p : surfaces) {
@@ -528,12 +528,12 @@ public:
 		for(;!do_exit;) {
 			char buffer[65536] { 0 };
 
-			fgets(buffer, sizeof buffer, fh);
+			if (fgets(buffer, sizeof buffer, fh)) {
+				printf("%s\n", buffer);
 
-			printf("%s\n", buffer);
-
-			std::vector<std::string> parts = split(buffer, "\n");
-			c->set_text(parts);
+				std::vector<std::string> parts = split(buffer, "\n");
+				c->set_text(parts);
+			}
 		}
 
 		pclose(fh);
@@ -555,9 +555,9 @@ int main(int argc, char *argv[])
 
 	int n_columns = 80, n_rows = 25;
 	bool grid = true;
-	bool full_screen = false;
+	bool full_screen = true;
 
-	int create_w = 1440, create_h = 800;
+	int create_w = 800, create_h = 480;
 
 	const SDL_VideoInfo *svi = SDL_GetVideoInfo();
 	SDL_Surface *screen = SDL_SetVideoMode(create_w, create_h, 32, (svi->hw_available ? SDL_HWSURFACE : SDL_SWSURFACE) | SDL_ASYNCBLIT | (full_screen ? SDL_FULLSCREEN : 0));
@@ -585,7 +585,7 @@ int main(int argc, char *argv[])
 	mqtt_feed mft3("192.168.64.1", 1883, { "dak/geozone/enter" }, &t3);
 
 	text_box t4("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 2, 0, 0, 0, 16 * xsteps, &tfmt2);
-	exec_feed eft4("/usr/bin/sensors | sed -n 's/^Package.*  +\\(.*\\)  .*$/\\1/p'", 1000, &t4);
+	exec_feed eft4("/usr/bin/sensors | sed -n 's/^temp1: *+\\(.*C\\).*$/\\1/p'", 1000, &t4);
 
 	scroller s2("/usr/share/vlc/skins2/fonts/FreeSans.ttf", ysteps * 5, 0, 0, 0, w, &tfmt2);
 	tail_feed tft5("rsstail -n 1 -H -u 'https://www.nu.nl/rss' -i 300 -P", &s2);
