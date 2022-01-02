@@ -747,7 +747,7 @@ int main(int argc, char *argv[])
 	}
 
 	const SDL_VideoInfo *svi = SDL_GetVideoInfo();
-	SDL_Surface *screen = SDL_SetVideoMode(create_w, create_h, 32, (svi->hw_available ? SDL_HWSURFACE : SDL_SWSURFACE) | SDL_ASYNCBLIT | (full_screen ? SDL_FULLSCREEN : 0));
+	SDL_Surface *screen = SDL_SetVideoMode(create_w, create_h, 32, (svi->hw_available ? SDL_HWSURFACE : SDL_SWSURFACE) | SDL_ASYNCBLIT | SDL_DOUBLEBUF | (full_screen ? SDL_FULLSCREEN : 0));
 	const int w = screen->w;
 	const int h = screen->h;
 	const int xsteps = w / n_columns;
@@ -911,7 +911,7 @@ int main(int argc, char *argv[])
 				error_exit(false, "Internal error: unknown container type %d", c.ct);
 		}
 
-		SDL_UpdateRect(screen, 0, 0, w, h);
+		SDL_Flip(screen);
 
 		SDL_Delay(10);
 
