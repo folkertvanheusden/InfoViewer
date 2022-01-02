@@ -1,4 +1,5 @@
 #include <atomic>
+#include <jansson.h>
 #include <mosquitto.h>
 #include <mutex>
 #include <signal.h>
@@ -296,6 +297,67 @@ void on_message(struct mosquitto *, void *arg, const struct mosquitto_message *m
 	printf("on_message: %s (%dx%d)\n", new_text.c_str(), result.first, result.second);
 }
 
+class formatter
+{
+public:
+	formatter() {
+	}
+
+	virtual ~formatter() {
+	}
+
+	virtual std::string process(const std::string & in) = 0;
+};
+
+class json_formatter
+{
+private:
+	const std::string format_string;
+
+public:
+	json_formatter(const std::string format_string) : format_string(format_string) {
+	}
+
+	virtual ~json_formatter() {
+	}
+
+	std::string process(const std::string & in)
+	{
+		json_error_t err { 0 };
+		json_t *j = json_loads(in.c_str(), JSON_DECODE_ANY | JSON_ALLOW_NUL, &err);
+		if (!j) {
+			fprintf(stderr, "json decoding of \"%s\" failed: %s\n", in.c_str(), err.text);
+			return "";
+		}
+
+		std::string out, cmd;
+		bool get_cmd = false;
+
+		for(size_t i=0; i<in.size(); i++) {
+			if (get_cmd) {
+				if (in.at(i) == '}') {
+					json_t *j_obj = json_object_get(j, cmd.c_str());
+					if (j_obj)
+						out += json_string_value(j_obj);
+
+					get_cmd = false;
+					cmd.clear();
+				}
+				else {
+					cmd += in.at(i);
+				}
+			}
+			else if (in.at(i) == '{')
+				get_cmd = true;
+			else {
+				out += in.at(i);
+			}
+		}
+
+		json_decref(j);
+	}
+};
+
 class mqtt_feed
 {
 private:
@@ -390,7 +452,7 @@ int main(int argc, char *argv[])
 		t2.put_static(&sd, 17, 0, 32, 4, true);
 
 		draw_box(&sd, 32, 12, 16, 4, true, 80, 80, 255);
-		t3.put_static(&sd, 17, 12, 32, 4, true);
+		t3.put_static(&sd, 32, 12, 16, 4, true);
 
 		SDL_UpdateRect(screen, 0, 0, w, h);
 
