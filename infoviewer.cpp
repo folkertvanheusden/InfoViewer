@@ -387,6 +387,11 @@ public:
 	{
 	}
 
+	void put_scroller(screen_descriptor_t *const sd, const int x, const int y, const int put_w, const int put_h)
+	{
+		assert(0);
+	}
+
 	void put_static(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h, const bool center)
 	{
 		lock.lock();
@@ -754,12 +759,19 @@ int main(int argc, char *argv[])
 		int bg_g = atoi(bg_color_str.at(1).c_str());
 		int bg_b = atoi(bg_color_str.at(2).c_str());
 
+		int x = cfg_int(instance, "x", "x position", false, 0);
+		int y = cfg_int(instance, "y", "y position", false, 0);
+		int w = cfg_int(instance, "w", "w position", false, 1);
+		int h = cfg_int(instance, "h", "h position", false, 1);
+
+		bool center = cfg_bool(instance, "center", "center", true, true);
+
 		container_type_t ct;
 
 		std::string type = cfg_str(instance, "type", "scroller or static", false, "static");
 		if (type == "static") {
 			ct = ct_static;
-			// TODO
+			c = new text_box(font, ysteps * font_height, fg_r, fg_g, fg_b, max_width * xsteps, tf);
 		}
 		else if (type == "scroller") {
 			ct = ct_scroller;
@@ -768,11 +780,6 @@ int main(int argc, char *argv[])
 		else {
 			error_exit(false, "\"type %s\" unknown", type.c_str());
 		}
-
-		int x = cfg_int(instance, "x", "x position", false, 0);
-		int y = cfg_int(instance, "y", "y position", false, 0);
-		int w = cfg_int(instance, "w", "w position", false, 1);
-		int h = cfg_int(instance, "h", "h position", false, 1);
 
 		container_t entry { 0 };
 		entry.c = c;
@@ -788,7 +795,7 @@ int main(int argc, char *argv[])
 		entry.w = w;
 		entry.h = h;
 		entry.border = cfg_bool(instance, "border", "border", false, true);
-		entry.center = cfg_bool(instance, "center", "center", true, true);
+		entry.center = center;
 		
 		containers.push_back(entry);
 
