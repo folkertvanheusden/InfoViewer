@@ -342,7 +342,7 @@ public:
 				std::string part = line.substr(0, 10);
 				line.erase(0, 10);
 
-				SDL_Surface *new_ = TTF_RenderUTF8_Solid(font, part.c_str(), col);
+				SDL_Surface *new_ = TTF_RenderUTF8_Blended(font, part.c_str(), col);
 				temp_new.push_back(new_);
 				new_total_w += new_->w;
 				new_h = std::max(new_h, new_->h);
