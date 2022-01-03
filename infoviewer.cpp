@@ -349,19 +349,21 @@ public:
 				usleep(500000);
 
 				time_t now = time(nullptr);
+				lock.lock();
 				if (most_recent_update != 0 && now - most_recent_update >= clear_after) {
-					lock.lock();
-
 					std::vector<SDL_Surface *> old = surfaces;
 					surfaces.clear();
 					total_w = h = 0;
+
+					most_recent_update = 0;
 
 					lock.unlock();
 
 					for(auto & s : old)
 						SDL_FreeSurface(s);
-
-					most_recent_update = 0;
+				}
+				else {
+					lock.unlock();
 				}
 			}
 		}
@@ -427,12 +429,12 @@ public:
 		total_w = new_total_w;
 		h = new_h;
 
+		most_recent_update = time(nullptr);
+
 		lock.unlock();
 
 		for(auto & s : old)
 			SDL_FreeSurface(s);
-
-		most_recent_update = time(nullptr);
 
 		return { total_w, h };
 	}
