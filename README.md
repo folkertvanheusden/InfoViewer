@@ -15,7 +15,13 @@ packages required:
 * libsdl-image1.2-dev
 * libsdl-ttf2.0-dev
 * libmosquitto-dev
+* libconfig++-dev
+* libjansson-dev
 
+The example uses fonts from fonts-freefont-ttf
+
+
+![(screenshot)](images/schermpje3.jpg)
 
 
 License: apache license v2.0

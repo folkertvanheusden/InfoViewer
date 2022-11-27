@@ -202,7 +202,7 @@ TTF_Font * load_font(const std::string & filename, unsigned int font_height, boo
 
         TTF_Font *font = TTF_OpenFont(real_path, font_height);
 	if (!font)
-		fprintf(stderr, "font %s (%s): %s\n", filename.c_str(), real_path, TTF_GetError());
+		error_exit("font %s (%s) can't be loaded: %s\n", filename.c_str(), real_path, TTF_GetError());
 
         if (!fast_rendering)
                 TTF_SetFontHinting(font, TTF_HINTING_LIGHT);
