@@ -573,7 +573,9 @@ public:
 					SDL_Rect cur_src { cur_render_x, 0, w - cur_render_x, h };
 					cur_render_x = 0;
 
-					SDL_RenderCopy(sd->screen, p, &cur_src, &dest);
+					SDL_Rect dest_temp { dest.x, dest.y, std::min(dest.w, cur_src.w), sd->ysteps * put_h };
+
+					SDL_RenderCopy(sd->screen, p, &cur_src, &dest_temp);
 					dest.x += cur_src.w;
 					pixels_to_do -= cur_src.w;
 
@@ -593,7 +595,7 @@ public:
 		for(;!do_exit;) {
 			usleep(10000);
 
-			if (total_w) {
+			if (total_w > 0) {
 				lock.lock();
 
 				render_x += scroll_speed;
@@ -858,11 +860,13 @@ int main(int argc, char *argv[])
 		create_h = cfg_int(global, "window-h", "when not full screen, window height", true, 480);
 	}
 
+	SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
+
 	SDL_Window *win = SDL_CreateWindow("InfoViewer",
                           SDL_WINDOWPOS_CENTERED,
                           SDL_WINDOWPOS_CENTERED_DISPLAY(1),
-                          640, 480,
-                          SDL_WINDOW_FULLSCREEN | SDL_WINDOW_OPENGL);
+                          create_w, create_h,
+                          (full_screen ? SDL_WINDOW_FULLSCREEN : 0) | SDL_WINDOW_OPENGL);
 	assert(win);
 
 	SDL_Renderer *screen = SDL_CreateRenderer(win, -1, 0);
