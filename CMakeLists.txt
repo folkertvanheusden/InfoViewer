@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.7)
 
 project(infoviewer)
 
-add_compile_options(-Wall -ffast-math)
+add_compile_options(-Wall -ffast-math -fno-inline)
 
 set(CMAKE_BUILD_TYPE Debug)
 
@@ -23,22 +23,22 @@ target_link_libraries(infoviewer ${LIBCONFIG_LIBRARIES})
 target_include_directories(infoviewer PUBLIC ${LIBCONFIG_INCLUDE_DIRS})
 target_compile_options(infoviewer PUBLIC ${LIBCONFIG_CFLAGS_OTHER})
 
-pkg_check_modules(SDL REQUIRED sdl)
+pkg_check_modules(SDL REQUIRED sdl2)
 target_link_libraries(infoviewer ${SDL_LIBRARIES})
 target_include_directories(infoviewer PUBLIC ${SDL_INCLUDE_DIRS})
 target_compile_options(infoviewer PUBLIC ${SDL_CFLAGS_OTHER})
 
-pkg_check_modules(SDL_GFX REQUIRED SDL_gfx)
+pkg_check_modules(SDL_GFX REQUIRED SDL2_gfx)
 target_link_libraries(infoviewer ${SDL_GFX_LIBRARIES})
 target_include_directories(infoviewer PUBLIC ${SDL_GFX_INCLUDE_DIRS})
 target_compile_options(infoviewer PUBLIC ${SDL_GFX_CFLAGS_OTHER})
 
-pkg_check_modules(SDL_IMAGE REQUIRED SDL_image)
+pkg_check_modules(SDL_IMAGE REQUIRED SDL2_image)
 target_link_libraries(infoviewer ${SDL_IMAGE_LIBRARIES})
 target_include_directories(infoviewer PUBLIC ${SDL_IMAGE_INCLUDE_DIRS})
 target_compile_options(infoviewer PUBLIC ${SDL_IMAGE_CFLAGS_OTHER})
 
-pkg_check_modules(SDL_TTF REQUIRED SDL_ttf)
+pkg_check_modules(SDL_TTF REQUIRED SDL2_ttf)
 target_link_libraries(infoviewer ${SDL_TTF_LIBRARIES})
 target_include_directories(infoviewer PUBLIC ${SDL_TTF_INCLUDE_DIRS})
 target_compile_options(infoviewer PUBLIC ${SDL_TTF_CFLAGS_OTHER})

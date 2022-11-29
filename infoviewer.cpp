@@ -10,10 +10,10 @@
 #include <thread>
 #include <unistd.h>
 #include <vector>
-#include <SDL/SDL.h>
-#include <SDL/SDL_gfxPrimitives.h>
-#include <SDL/SDL_image.h>
-#include <SDL/SDL_ttf.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL2_gfxPrimitives.h>
+#include <SDL2/SDL_image.h>
+#include <SDL2/SDL_ttf.h>
 
 std::atomic_bool do_exit { false };
 
@@ -175,13 +175,15 @@ void set_thread_name(const std::string & name)
 
 typedef struct
 {
-	SDL_Surface *screen;
+	SDL_Renderer *screen;
 	int scr_w, scr_h;
 	int xsteps, ysteps;
 } screen_descriptor_t;
 
 void draw_box(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h, const bool border, const int r, const int g, const int b, const int b_r, const int b_g, const int b_b)
 {
+	assert(sd->screen);
+
 	int x1 = x * sd->xsteps;
 	int y1 = y * sd->ysteps;
 	int x2 = x1 + sd->xsteps * w - 1;
@@ -202,7 +204,7 @@ TTF_Font * load_font(const std::string & filename, unsigned int font_height, boo
 
         TTF_Font *font = TTF_OpenFont(real_path, font_height);
 	if (!font)
-		fprintf(stderr, "font %s (%s): %s\n", filename.c_str(), real_path, TTF_GetError());
+		error_exit("font %s (%s) can't be loaded: %s\n", filename.c_str(), real_path, TTF_GetError());
 
         if (!fast_rendering)
                 TTF_SetFontHinting(font, TTF_HINTING_LIGHT);
@@ -314,9 +316,10 @@ private:
 	TTF_Font *font { nullptr };
 
 protected:
+	SDL_Renderer *renderer { nullptr };
 	const int max_width { 0 };
 	std::mutex lock;
-	std::vector<SDL_Surface *> surfaces;
+	std::vector<SDL_Texture *> surfaces;
 	std::string text;
 	int total_w { 0 }, h { 0 };
 	SDL_Color col { 0, 0, 0, 0 };
@@ -326,8 +329,10 @@ protected:
 	std::thread *th { nullptr };
 
 public:
-	container(const std::string & font_file, const int font_height, const int max_width, text_formatter *const fmt, const int clear_after) : max_width(max_width), fmt(fmt), clear_after(clear_after)
+	container(SDL_Renderer *const renderer, const std::string & font_file, const int font_height, const int max_width, text_formatter *const fmt, const int clear_after) : renderer(renderer), max_width(max_width), fmt(fmt), clear_after(clear_after)
 	{
+		assert(renderer);
+
 		font = load_font(font_file, font_height, true);
 
 		th = new std::thread(std::ref(*this));
@@ -336,7 +341,7 @@ public:
 	virtual ~container()
 	{
 		for(auto & s : surfaces)
-			SDL_FreeSurface(s);
+			SDL_DestroyTexture(s);
 
 		th->join();
 		delete th;
@@ -351,7 +356,7 @@ public:
 				time_t now = time(nullptr);
 				lock.lock();
 				if (most_recent_update != 0 && now - most_recent_update >= clear_after) {
-					std::vector<SDL_Surface *> old = surfaces;
+					std::vector<SDL_Texture *> old = surfaces;
 					surfaces.clear();
 					total_w = h = 0;
 
@@ -360,7 +365,7 @@ public:
 					lock.unlock();
 
 					for(auto & s : old)
-						SDL_FreeSurface(s);
+						SDL_DestroyTexture(s);
 				}
 				else {
 					lock.unlock();
@@ -371,7 +376,7 @@ public:
 
 	virtual std::pair<int, int> set_text(const std::vector<std::string> & in_)
 	{
-		std::vector<SDL_Surface *> temp_new;
+		std::vector<SDL_Texture *> temp_new;
 
 		std::vector<std::string> in;
 
@@ -413,17 +418,23 @@ public:
 
 				line.erase(0, n_chars);
 
-				SDL_Surface *new_ = TTF_RenderUTF8_Blended(font, part.c_str(), col);
-				temp_new.push_back(new_);
-				new_total_w += new_->w;
-				new_h = std::max(new_h, new_->h);
+				SDL_Surface *new_s = TTF_RenderUTF8_Blended(font, part.c_str(), col);
+				assert(new_s);
+				SDL_Texture *new_t = SDL_CreateTextureFromSurface(renderer, new_s);
+				assert(new_t);
+
+				temp_new.push_back(new_t);
+				new_total_w += new_s->w;
+				new_h = std::max(new_h, new_s->h);
+
+				SDL_FreeSurface(new_s);
 			}
 		}
 		ttf_lock.unlock();
 
 		lock.lock();
 
-		std::vector<SDL_Surface *> old = surfaces;
+		std::vector<SDL_Texture *> old = surfaces;
 
 		surfaces = temp_new;
 		total_w = new_total_w;
@@ -434,7 +445,7 @@ public:
 		lock.unlock();
 
 		for(auto & s : old)
-			SDL_FreeSurface(s);
+			SDL_DestroyTexture(s);
 
 		return { total_w, h };
 	}
@@ -447,7 +458,7 @@ public:
 class text_box : public container
 {
 public:
-	text_box(const std::string & font_file, const int font_height, const int r, const int g, const int b, const int max_width, text_formatter *const fmt, const int clear_after) : container(font_file, font_height, max_width, fmt, clear_after)
+	text_box(SDL_Renderer * const renderer, const std::string & font_file, const int font_height, const int r, const int g, const int b, const int max_width, text_formatter *const fmt, const int clear_after) : container(renderer, font_file, font_height, max_width, fmt, clear_after)
 	{
 		col.r = r;
 		col.g = g;
@@ -468,21 +479,37 @@ public:
 		lock.lock();
 
 		int biggest_w = 0;
-		for(auto & p : surfaces)
-			biggest_w = std::max(biggest_w, p->w);
+		for(auto & p : surfaces) {
+			Uint32 format = 0;
+			int access = 0;
+			int w = 0;
+			int h = 0;
+
+			int rc = SDL_QueryTexture(p, &format, &access, &w, &h);
+			assert(rc == 0);
+
+			biggest_w = std::max(biggest_w, w);
+		}
 
 		const int put_x = x * sd->xsteps + 1;
 		int put_y = y * sd->ysteps + 1;
 		const int put_w = w * sd->xsteps - 2;
 		int work_h = h * sd->ysteps - 2;
 		for(auto & p : surfaces) {
-			SDL_Rect dest { center ? put_x + put_w / 2 - biggest_w / 2 : put_x, put_y, put_w, p->h };
-			SDL_Rect src { 0, 0, p->w, p->h };
+			Uint32 format = 0;
+			int access = 0;
+			int w = 0;
+			int h = 0;
+			int rc = SDL_QueryTexture(p, &format, &access, &w, &h);
+			assert(rc == 0);
 
-			SDL_BlitSurface(p, &src, sd->screen, &dest);
+			SDL_Rect dest { center ? put_x + put_w / 2 - biggest_w / 2 : put_x, put_y, put_w, h };
+			SDL_Rect src { 0, 0, w, h };
 
-			put_y += p->h;
-			work_h -= p->h;
+			SDL_RenderCopy(sd->screen, p, &src, &dest);
+
+			put_y += h;
+			work_h -= h;
 			if (work_h <= 0)
 				break;
 		}
@@ -498,8 +525,10 @@ private:
 	std::thread *th { nullptr };
 
 public:
-	scroller(const std::string & font_file, const int scroll_speed, const int font_height, const int r, const int g, const int b, const int max_width, text_formatter *const fmt, const int clear_after) : container(font_file, font_height, max_width, fmt, clear_after), scroll_speed(scroll_speed)
+	scroller(SDL_Renderer * const renderer, const std::string & font_file, const int scroll_speed, const int font_height, const int r, const int g, const int b, const int max_width, text_formatter *const fmt, const int clear_after) : container(renderer, font_file, font_height, max_width, fmt, clear_after), scroll_speed(scroll_speed)
 	{
+		assert(renderer);
+
 		col.r = r;
 		col.g = g;
 		col.b = b;
@@ -529,15 +558,24 @@ public:
 
 			do {
 				for(auto & p : surfaces) {
-					if (p->w <= cur_render_x) {
-						cur_render_x -= p->w;
+					Uint32 format = 0;
+					int access = 0;
+					int w = 0;
+					int h = 0;
+					int rc = SDL_QueryTexture(p, &format, &access, &w, &h);
+					assert(rc == 0);
+
+					if (w <= cur_render_x) {
+						cur_render_x -= w;
 						continue;
 					}
 
-					SDL_Rect cur_src { cur_render_x, 0, p->w - cur_render_x, h };
+					SDL_Rect cur_src { cur_render_x, 0, w - cur_render_x, h };
 					cur_render_x = 0;
 
-					SDL_BlitSurface(p, &cur_src, sd->screen, &dest);
+					SDL_Rect dest_temp { dest.x, dest.y, std::min(dest.w, cur_src.w), sd->ysteps * put_h };
+
+					SDL_RenderCopy(sd->screen, p, &cur_src, &dest_temp);
 					dest.x += cur_src.w;
 					pixels_to_do -= cur_src.w;
 
@@ -557,7 +595,7 @@ public:
 		for(;!do_exit;) {
 			usleep(10000);
 
-			if (total_w) {
+			if (total_w > 0) {
 				lock.lock();
 
 				render_x += scroll_speed;
@@ -607,6 +645,8 @@ private:
 public:
 	static_feed(const std::string & text, container *const c) : feed(c), text(split(text, "\n"))
 	{
+		assert(c);
+
 		th = new std::thread(std::ref(*this));
 	}
 
@@ -772,7 +812,11 @@ int main(int argc, char *argv[])
 {
 	signal(SIGTERM, sigh);
 
-	SDL_Init(SDL_INIT_VIDEO);
+	if (SDL_Init(SDL_INIT_VIDEO) == -1) {
+                fprintf(stderr, "Failed to initialize SDL video subsystem\n");
+                return 1;
+	}
+
 	atexit(SDL_Quit);
 
 	TTF_Init();
@@ -803,6 +847,8 @@ int main(int argc, char *argv[])
 
 	int create_w = 800, create_h = 480;
 
+	int display_nr = 0;
+
 	{
 		const libconfig::Setting & global = root.lookup("global");
 
@@ -814,12 +860,27 @@ int main(int argc, char *argv[])
 
 		create_w = cfg_int(global, "window-w", "when not full screen, window width", true, 800);
 		create_h = cfg_int(global, "window-h", "when not full screen, window height", true, 480);
+
+		display_nr = cfg_int(global, "display-nr", "with multiple monitors, use this monitor", true, 1);
 	}
 
-	const SDL_VideoInfo *svi = SDL_GetVideoInfo();
-	SDL_Surface *screen = SDL_SetVideoMode(create_w, create_h, 32, (svi->hw_available ? SDL_HWSURFACE : SDL_SWSURFACE) | SDL_ASYNCBLIT | SDL_DOUBLEBUF | (full_screen ? SDL_FULLSCREEN : 0));
-	const int w = screen->w;
-	const int h = screen->h;
+	SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
+
+	SDL_Window *win = SDL_CreateWindow("InfoViewer",
+                          SDL_WINDOWPOS_UNDEFINED_DISPLAY(display_nr),
+                          SDL_WINDOWPOS_UNDEFINED_DISPLAY(display_nr),
+                          create_w, create_h,
+                          (full_screen ? SDL_WINDOW_FULLSCREEN : 0) | SDL_WINDOW_OPENGL);
+	assert(win);
+
+	SDL_Renderer *screen = SDL_CreateRenderer(win, -1, 0);
+	assert(screen);
+
+	int w = 0;
+	int h = 0;
+	SDL_GetWindowSize(win, &w, &h);
+	printf("%dx%d\n", w, h);
+
 	const int xsteps = w / n_columns;
 	const int ysteps = h / n_rows;
 	screen_descriptor_t sd { screen, w, h, xsteps, ysteps };
@@ -892,12 +953,12 @@ int main(int argc, char *argv[])
 		std::string type = cfg_str(instance, "type", "scroller or static", false, "static");
 		if (type == "static") {
 			ct = ct_static;
-			c = new text_box(font, ysteps * font_height, fg_r, fg_g, fg_b, max_width * xsteps, tf, clear_after);
+			c = new text_box(screen, font, ysteps * font_height, fg_r, fg_g, fg_b, max_width * xsteps, tf, clear_after);
 		}
 		else if (type == "scroller") {
 			ct = ct_scroller;
 			int scroll_speed = cfg_int(instance, "scroll-speed", "pixel count", true, 1);
-			c = new scroller(font, scroll_speed, ysteps * font_height, fg_r, fg_g, fg_b, max_width * xsteps, tf, clear_after);
+			c = new scroller(screen, font, scroll_speed, ysteps * font_height, fg_r, fg_g, fg_b, max_width * xsteps, tf, clear_after);
 		}
 		else {
 			error_exit(false, "\"type %s\" unknown", type.c_str());
@@ -993,7 +1054,7 @@ int main(int argc, char *argv[])
 				error_exit(false, "Internal error: unknown container type %d", c.ct);
 		}
 
-		SDL_Flip(screen);
+		SDL_RenderPresent(screen);
 
 		SDL_Delay(10);
 
