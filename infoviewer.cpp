@@ -847,6 +847,8 @@ int main(int argc, char *argv[])
 
 	int create_w = 800, create_h = 480;
 
+	int display_nr = 0;
+
 	{
 		const libconfig::Setting & global = root.lookup("global");
 
@@ -858,13 +860,15 @@ int main(int argc, char *argv[])
 
 		create_w = cfg_int(global, "window-w", "when not full screen, window width", true, 800);
 		create_h = cfg_int(global, "window-h", "when not full screen, window height", true, 480);
+
+		display_nr = cfg_int(global, "display-nr", "with multiple monitors, use this monitor", true, 1);
 	}
 
 	SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
 
 	SDL_Window *win = SDL_CreateWindow("InfoViewer",
-                          SDL_WINDOWPOS_CENTERED,
-                          SDL_WINDOWPOS_CENTERED_DISPLAY(1),
+                          SDL_WINDOWPOS_UNDEFINED_DISPLAY(display_nr),
+                          SDL_WINDOWPOS_UNDEFINED_DISPLAY(display_nr),
                           create_w, create_h,
                           (full_screen ? SDL_WINDOW_FULLSCREEN : 0) | SDL_WINDOW_OPENGL);
 	assert(win);
