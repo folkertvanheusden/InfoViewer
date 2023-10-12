@@ -20,7 +20,7 @@ packages required:
 
 The example uses fonts from fonts-freefont-ttf
 
-"infoviewer.cfg" is the configuration I use at home (see screenshot below). It has local dependencies.
+"infoviewer.cfg" is the configuration I use at home (see screenshot below). It has local dependencies and shows all functionality.
 With regular internet access you should be able to give "example.cfg" a try.
 
 
