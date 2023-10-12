@@ -316,17 +316,18 @@ private:
 	TTF_Font *font { nullptr };
 
 protected:
-	SDL_Renderer *renderer { nullptr };
-	const int max_width { 0 };
-	std::mutex lock;
+	SDL_Renderer   *renderer  { nullptr };
+	const int       max_width { 0 };
+	std::mutex      lock;
 	std::vector<SDL_Texture *> surfaces;
-	std::string text;
-	int total_w { 0 }, h { 0 };
-	SDL_Color col { 0, 0, 0, 0 };
+	std::string     text;
+	int             total_w   { 0 };
+	int             h         { 0 };
+	SDL_Color       col       { 0, 0, 0, 0 };
 	text_formatter *const fmt { nullptr };
-	const int clear_after { -1 };
-	time_t most_recent_update { 0 };
-	std::thread *th { nullptr };
+	const int       clear_after { -1 };
+	time_t          most_recent_update { 0 };
+	std::thread    *th        { nullptr };
 
 public:
 	container(SDL_Renderer *const renderer, const std::string & font_file, const int font_height, const int max_width, text_formatter *const fmt, const int clear_after) : renderer(renderer), max_width(max_width), fmt(fmt), clear_after(clear_after)
@@ -354,11 +355,14 @@ public:
 				usleep(500000);
 
 				time_t now = time(nullptr);
+
 				lock.lock();
 				if (most_recent_update != 0 && now - most_recent_update >= clear_after) {
 					std::vector<SDL_Texture *> old = surfaces;
 					surfaces.clear();
-					total_w = h = 0;
+
+					total_w = 0;
+					h       = 0;
 
 					most_recent_update = 0;
 
@@ -389,6 +393,7 @@ public:
 			std::size_t lf = new_t.find("\n");
 			if (lf != std::string::npos) {
 				std::vector<std::string> parts = split(new_t, "\n");
+
 				std::copy(parts.begin(), parts.end(), std::back_inserter(in));
 			}
 			else {
