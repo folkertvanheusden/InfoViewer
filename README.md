@@ -24,6 +24,6 @@ The example uses fonts from fonts-freefont-ttf
 ![(screenshot)](images/schermpje3.jpg)
 
 
-License: apache license v2.0
+License: CC0
 
 written by folkert van heusden <mail@vanheusden.com>
