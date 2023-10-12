@@ -410,24 +410,31 @@ public:
 
 		ttf_lock.lock();
 		for(auto line : in) {
-			std::string work_line = line;
+			int text_w = 0;
+			int dummy  = 0;
+			TTF_SizeUTF8(font, line.c_str(), &text_w, &dummy);
 
-			// workaround for TTF_RenderUTF8_Blended_Wrapped returning nullptr when feeding an empty string
-			if (work_line.empty())
-				work_line += " ";
+			int    divider = ceil(double(text_w) / max_width);
+			size_t n_chars = ceil(line.size() / double(divider));
 
-			SDL_Surface *new_s = TTF_RenderUTF8_Blended_Wrapped(font, work_line.c_str(), col, max_width);
-			assert(new_s);
+			for(int i=0; i<divider; i++) {
+				std::string part = line.substr(0, n_chars);
+				if (part.empty())
+					break;
 
-			SDL_Texture *new_t = SDL_CreateTextureFromSurface(renderer, new_s);
-			assert(new_t);
+				line.erase(0, n_chars);
 
-			temp_new.push_back(new_t);
+				SDL_Surface *new_s = TTF_RenderUTF8_Blended(font, part.c_str(), col);
+				assert(new_s);
+				SDL_Texture *new_t = SDL_CreateTextureFromSurface(renderer, new_s);
+				assert(new_t);
 
-			new_total_w += new_s->w;
-			new_h = std::max(new_h, new_s->h);
+				temp_new.push_back(new_t);
+				new_total_w += new_s->w;
+				new_h = std::max(new_h, new_s->h);
 
-			SDL_FreeSurface(new_s);
+				SDL_FreeSurface(new_s);
+			}
 		}
 		ttf_lock.unlock();
 
