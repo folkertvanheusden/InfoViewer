@@ -483,25 +483,28 @@ public:
 			biggest_w = std::max(biggest_w, w);
 		}
 
-		const int put_x = x * sd->xsteps + 1;
-		int put_y = y * sd->ysteps + 1;
-		const int put_w = w * sd->xsteps - 2;
-		int work_h = h * sd->ysteps - 2;
+		const int put_x  = x * sd->xsteps + 1;
+		int       put_y  = y * sd->ysteps + 1;
+
+		const int put_w  = w * sd->xsteps - 2;
+		int       work_h = h * sd->ysteps - 2;
+
 		for(auto & p : surfaces) {
 			Uint32 format = 0;
-			int access = 0;
-			int w = 0;
-			int h = 0;
-			int rc = SDL_QueryTexture(p, &format, &access, &w, &h);
+			int    access = 0;
+			int    w      = 0;
+			int    h      = 0;
+			int    rc     = SDL_QueryTexture(p, &format, &access, &w, &h);
 			assert(rc == 0);
 
-			SDL_Rect dest { center ? put_x + put_w / 2 - biggest_w / 2 : put_x, put_y, put_w, h };
-			SDL_Rect src { 0, 0, w, h };
+			SDL_Rect dest { center ? put_x + put_w / 2 - biggest_w / 2 : put_x, put_y, biggest_w, h };
+			SDL_Rect src  { 0, 0, w, h };
 
 			SDL_RenderCopy(sd->screen, p, &src, &dest);
 
-			put_y += h;
+			put_y  += h;
 			work_h -= h;
+
 			if (work_h <= 0)
 				break;
 		}
