@@ -1065,6 +1065,11 @@ int main(int argc, char *argv[])
 				do_exit = true;
 				break;
 			}
+
+			if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_q) {
+				do_exit = true;
+				break;
+			}
 		}
 	}
 
