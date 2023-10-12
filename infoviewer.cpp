@@ -821,6 +821,11 @@ int main(int argc, char *argv[])
 {
 	signal(SIGTERM, sigh);
 
+	if (argc != 2) {
+		fprintf(stderr, "Configuration file parameter missing\n");
+		return 1;
+	}
+
 	if (SDL_Init(SDL_INIT_VIDEO) == -1) {
                 fprintf(stderr, "Failed to initialize SDL video subsystem\n");
                 return 1;
