@@ -410,8 +410,15 @@ public:
 
 		ttf_lock.lock();
 		for(auto line : in) {
-			SDL_Surface *new_s = TTF_RenderUTF8_Blended_Wrapped(font, line.c_str(), col, max_width);
+			std::string work_line = line;
+
+			// workaround for TTF_RenderUTF8_Blended_Wrapped returning nullptr when feeding an empty string
+			if (work_line.empty())
+				work_line += " ";
+
+			SDL_Surface *new_s = TTF_RenderUTF8_Blended_Wrapped(font, work_line.c_str(), col, max_width);
 			assert(new_s);
+
 			SDL_Texture *new_t = SDL_CreateTextureFromSurface(renderer, new_s);
 			assert(new_t);
 
