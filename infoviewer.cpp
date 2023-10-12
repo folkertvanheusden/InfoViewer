@@ -456,7 +456,7 @@ public:
 		return { total_w, h };
 	}
 
-	virtual void put_static(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h, const bool center) = 0;
+	virtual void put_static(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h, const bool center_h, const bool center_v) = 0;
 
 	virtual void put_scroller(screen_descriptor_t *const sd, const int x, const int y, const int put_w, const int put_h) = 0;
 };
@@ -480,21 +480,24 @@ public:
 		assert(0);
 	}
 
-	void put_static(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h, const bool center)
+	void put_static(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h, const bool center_h, const bool center_v)
 	{
 		lock.lock();
 
 		int biggest_w = 0;
+		int biggest_h = 0;
+
 		for(auto & p : surfaces) {
 			Uint32 format = 0;
-			int access = 0;
-			int w = 0;
-			int h = 0;
+			int    access = 0;
+			int    w      = 0;
+			int    h      = 0;
 
-			int rc = SDL_QueryTexture(p, &format, &access, &w, &h);
+			int    rc     = SDL_QueryTexture(p, &format, &access, &w, &h);
 			assert(rc == 0);
 
 			biggest_w = std::max(biggest_w, w);
+			biggest_h = std::max(biggest_h, h);
 		}
 
 		const int put_x  = x * sd->xsteps + 1;
@@ -511,7 +514,11 @@ public:
 			int    rc     = SDL_QueryTexture(p, &format, &access, &w, &h);
 			assert(rc == 0);
 
-			SDL_Rect dest { center ? put_x + put_w / 2 - biggest_w / 2 : put_x, put_y, biggest_w, h };
+			int     cur_x = center_h ? put_x + put_w / 2 - biggest_w / 2 : put_x;
+			int     cur_y = center_v ? put_y + biggest_h / 4 : put_y;
+
+
+			SDL_Rect dest { cur_x, cur_y, biggest_w, h };
 			SDL_Rect src  { 0, 0, w, h };
 
 			SDL_RenderCopy(sd->screen, p, &src, &dest);
@@ -551,7 +558,7 @@ public:
 		delete th;
 	}
 
-	void put_static(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h, const bool center)
+	void put_static(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h, const bool center_h, const bool center_v)
 	{
 		assert(0);
 	}
@@ -814,7 +821,7 @@ typedef struct {
 	int bg_r, bg_g, bg_b;
 	int b_r, b_g, b_b;
 	int x, y, w, h;
-	bool border, center, bg_fill;
+	bool border, center_h, center_v, bg_fill;
 } container_t;
 
 int main(int argc, char *argv[])
@@ -855,13 +862,15 @@ int main(int argc, char *argv[])
 
 	const libconfig::Setting & root = cfg.getRoot();
 
-	int n_columns = 80, n_rows = 25;
-	bool grid = true;
+	int  n_columns   = 80;
+	int  n_rows      = 25;
+	bool grid        = true;
 	bool full_screen = true;
 
-	int create_w = 800, create_h = 480;
+	int  create_w    = 800;
+	int  create_h    = 480;
 
-	int display_nr = 0;
+	int  display_nr  = 0;
 
 	{
 		const libconfig::Setting & global = root.lookup("global");
@@ -903,10 +912,10 @@ int main(int argc, char *argv[])
 		SDL_ShowCursor(SDL_DISABLE);
 
 	std::vector<container_t> containers;
-	std::vector<feed *> feeds;
+	std::vector<feed *>      feeds;
 
-	const libconfig::Setting & instances = root["instances"];
-	size_t n_instances = instances.getLength();
+	const libconfig::Setting & instances   = root["instances"];
+	size_t                     n_instances = instances.getLength();
 
 	for(size_t i=0; i<n_instances; i++) {
 		const libconfig::Setting & instance = instances[i];
@@ -960,7 +969,8 @@ int main(int argc, char *argv[])
 		int w = cfg_int(instance, "w", "w position", false, 1);
 		int h = cfg_int(instance, "h", "h position", false, 1);
 
-		bool center = cfg_bool(instance, "center", "center", true, true);
+		bool center_h = cfg_bool(instance, "center-horizontal", "center horizontal", true, true);
+		bool center_v = cfg_bool(instance, "center-vertical",   "center vertical",   true, true);
 
 		container_type_t ct;
 
@@ -996,7 +1006,8 @@ int main(int argc, char *argv[])
 		entry.w = w;
 		entry.h = h;
 		entry.border = cfg_bool(instance, "border", "border", false, true);
-		entry.center = center;
+		entry.center_h = center_h;
+		entry.center_v = center_v;
 
 		containers.push_back(entry);
 
@@ -1007,7 +1018,7 @@ int main(int argc, char *argv[])
 
 		if (feed_type == "mqtt") {
 			std::string host = cfg_str(s_feed, "host", "mqtt host", false, "127.0.0.1");
-			int port = cfg_int(s_feed, "port", "mqtt port", true, 1883);
+			int         port = cfg_int(s_feed, "port", "mqtt port", true, 1883);
 
 			const libconfig::Setting & s_topics = s_feed["topics"];
 			size_t n_topics = s_topics.getLength();
@@ -1061,7 +1072,7 @@ int main(int argc, char *argv[])
 				draw_box(&sd, c.x, c.y, c.w, c.h, c.border, c.bg_r, c.bg_g, c.bg_b, c.b_r, c.b_g, c.b_b);
 
 			if (c.ct == ct_static)		
-				c.c->put_static(&sd, c.x, c.y, c.w, c.h, c.center);
+				c.c->put_static(&sd, c.x, c.y, c.w, c.h, c.center_h, c.center_v);
 			else if (c.ct == ct_scroller)
 				c.c->put_scroller(&sd, c.x, c.y, c.w, c.h);
 			else
