@@ -1,0 +1,4 @@
+- word-wrap flag voor bij bijv. as-is ism max-width
+- x/y-center
+- clean terminate
+- mqtt_feed opvragen adhv topic ipv instance per topic
