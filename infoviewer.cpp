@@ -17,32 +17,16 @@
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 
+#include "error.h"
+#include "proc.h"
+#include "str.h"
+
+
 std::atomic_bool do_exit { false };
 
 void sigh(int s)
 {
 	do_exit = true;
-}
-
-void error_exit(const bool se, const char *format, ...)
-{
-	int e = errno;
-	va_list ap;
-
-	va_start(ap, format);
-	char *temp = NULL;
-	if (vasprintf(&temp, format, ap) == -1)
-		puts(format);  // last resort
-	va_end(ap);
-
-	fprintf(stderr, "%s\n", temp);
-
-	if (se && e)
-		fprintf(stderr, "errno: %d (%s)\n", e, strerror(e));
-
-	free(temp);
-
-	exit(EXIT_FAILURE);
 }
 
 std::string cfg_str(const libconfig::Setting & cfg, const std::string & key, const char *descr, const bool optional, const std::string & def)
@@ -115,54 +99,6 @@ int cfg_bool(const libconfig::Setting & cfg, const char *const key, const char *
 	}
 
 	return v;
-}
-
-std::string myformat(const char *const fmt, ...)
-{
-	char *buffer = nullptr;
-        va_list ap;
-
-        va_start(ap, fmt);
-        if (vasprintf(&buffer, fmt, ap) == -1) {
-		va_end(ap);
-		return "(?)";
-	}
-        va_end(ap);
-
-	std::string result = buffer;
-	free(buffer);
-
-	return result;
-}
-
-std::vector<std::string> split(std::string in, std::string splitter)
-{
-	std::vector<std::string> out;
-	size_t splitter_size = splitter.size();
-
-	for(;;)
-	{
-		size_t pos = in.find(splitter);
-		if (pos == std::string::npos)
-			break;
-
-		std::string before = in.substr(0, pos);
-		out.push_back(before);
-
-		size_t bytes_left = in.size() - (pos + splitter_size);
-		if (bytes_left == 0)
-		{
-			out.push_back("");
-			return out;
-		}
-
-		in = in.substr(pos + splitter_size);
-	}
-
-	if (in.size() > 0)
-		out.push_back(in);
-
-	return out;
 }
 
 void set_thread_name(const std::string & name)
@@ -879,22 +815,23 @@ public:
 		set_thread_name("exec");
 
 		for(;!do_exit;) {
+			auto rc = exec_with_pipe(cmd, ".", 80, 25, -1, true);
+
 			char buffer[65536] { 0 };
 
-			FILE *fh = popen(cmd.c_str(), "r");
-			if (fh) {
-				if (fread(buffer, 1, sizeof buffer - 1, fh) == 0)
-					buffer[0] = 0x00;
+			int n_chars = read(std::get<1>(rc), buffer, sizeof(buffer) - 1);
 
-				pclose(fh);
-				printf("%s\n", buffer);
+			close(std::get<1>(rc));
 
-				std::vector<std::string> parts = split(buffer, "\n");
-				c->set_text(parts);
-			}
-			else {
-				fprintf(stderr, "Cannot execute \"%s\"\n", cmd.c_str());
-			}
+			kill(SIGTERM, std::get<0>(rc));
+
+			if (n_chars <= 0)
+				break;
+
+			buffer[n_chars] = 0x00;
+
+			std::vector<std::string> parts = split(buffer, "\n");
+			c->set_text(parts);
 
 			usleep(interval_ms * 1000);
 		}
@@ -920,22 +857,25 @@ public:
 	{
 		set_thread_name("tail");
 
-		FILE *fh = popen(cmd.c_str(), "r");
-		if (!fh)
-			fprintf(stderr, "Cannot execute \"%s\"\n", cmd.c_str());
+		auto rc = exec_with_pipe(cmd, ".", 80, 25, 1, true);
 
-		for(;!do_exit;) {
-			char buffer[65536] { 0 };
+		char buffer[65536] { 0 };
 
-			if (fgets(buffer, sizeof buffer, fh)) {
-				printf("%s\n", buffer);
+		for(;;) {
+			int n_chars = read(std::get<1>(rc), buffer, sizeof(buffer) - 1);
 
-				std::vector<std::string> parts = split(buffer, "\n");
-				c->set_text(parts);
-			}
+			if (n_chars <= 0)
+				break;
+
+			buffer[n_chars] = 0x00;
+
+			std::vector<std::string> parts = split(buffer, "\n");
+			c->set_text(parts);
 		}
 
-		pclose(fh);
+		close(std::get<1>(rc));
+
+		kill(SIGTERM, std::get<0>(rc));
 	}
 };
 

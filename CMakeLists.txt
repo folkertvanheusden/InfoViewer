@@ -8,7 +8,11 @@ set(CMAKE_BUILD_TYPE Debug)
 
 add_executable(
   infoviewer
+  error.cpp
   infoviewer.cpp
+  io.cpp
+  proc.cpp
+  str.cpp
 )
 
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
