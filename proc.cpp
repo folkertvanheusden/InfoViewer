@@ -18,7 +18,7 @@
 
 
 // this code needs more error checking TODO
-std::tuple<pid_t, int, int> exec_with_pipe(const std::string & command, const std::string & dir, const int width, const int height, const int restart_interval, const bool stderr_to_stdout)
+std::tuple<pid_t, int, int> exec_with_pipe(const std::string & command, const std::string & dir, const int width, const int height, const int restart_interval, const bool stderr_to_stdout, const bool in_shell)
 {
 	int fd_master { -1 };
 
@@ -62,15 +62,33 @@ std::tuple<pid_t, int, int> exec_with_pipe(const std::string & command, const st
 			pid_t child_pid = fork();
 
 			if (child_pid == 0) {
-				std::vector<std::string> parts = split(command, " ");
+				int rc = -1;
 
-				size_t n_args = parts.size();
-				char **pars = new char *[n_args + 1];
-				for(size_t i=0; i<n_args; i++)
-					pars[i] = (char *)parts.at(i).c_str();
-				pars[n_args] = nullptr;
+				if (in_shell) {
+					const char **pars = new const char *[2 + 2];
 
-				if (execv(pars[0], &pars[0]) == -1) {
+					pars[0] = "/bin/sh";
+					pars[1] = "-c";
+					pars[2] = command.c_str();
+					pars[3] = nullptr;
+
+					rc = execv(pars[0], (char **)pars);
+				}
+				else {
+					std::vector<std::string> parts = split(command, " ");
+
+					size_t n_args = parts.size();
+					char **pars = new char *[n_args + 1];
+
+					for(size_t i=0; i<n_args; i++)
+						pars[i] = (char *)parts.at(i).c_str();
+
+					pars[n_args] = nullptr;
+
+					rc = execv(pars[0], &pars[0]);
+				}
+
+				if (rc == -1) {
 					int e = errno;
 					std::string error = myformat("CANNOT INVOKE \"%s\"! (%s)", command.c_str(), strerror(e));
 

@@ -815,7 +815,7 @@ public:
 		set_thread_name("exec");
 
 		for(;!do_exit;) {
-			auto rc = exec_with_pipe(cmd, ".", 80, 25, -1, true);
+			auto rc = exec_with_pipe(cmd, ".", 80, 25, -1, true, true);
 
 			char buffer[65536] { 0 };
 
@@ -857,7 +857,7 @@ public:
 	{
 		set_thread_name("tail");
 
-		auto rc = exec_with_pipe(cmd, ".", 80, 25, 1, true);
+		auto rc = exec_with_pipe(cmd, ".", 80, 25, 1, true, true);
 
 		char buffer[65536] { 0 };
 
