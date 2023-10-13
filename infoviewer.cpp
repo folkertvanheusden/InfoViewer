@@ -830,6 +830,19 @@ public:
 
 			buffer[n_chars] = 0x00;
 
+			for(;;) {
+				char *p = strchr(buffer, '\r');
+				if (!p)
+					break;
+
+				size_t to_move = n_chars - (p + 1 - buffer);
+
+				if (to_move > 0) {
+					memmove(p, p + 1, to_move);
+					buffer[n_chars--] = 0x00;
+				}
+			}
+
 			std::vector<std::string> parts = split(buffer, "\n");
 			c->set_text(parts);
 
@@ -859,18 +872,26 @@ public:
 
 		auto rc = exec_with_pipe(cmd, ".", 80, 25, 1, true, true);
 
-		char buffer[65536] { 0 };
+		std::string buffer;
 
 		for(;;) {
-			int n_chars = read(std::get<1>(rc), buffer, sizeof(buffer) - 1);
+			char chr = 0;
 
-			if (n_chars <= 0)
+			int read_rc = read(std::get<1>(rc), &chr, 1);
+			if (read_rc <= 0)
 				break;
 
-			buffer[n_chars] = 0x00;
+			if (chr == 13)
+				continue;
 
-			std::vector<std::string> parts = split(buffer, "\n");
-			c->set_text(parts);
+			if (chr == 10) {
+				c->set_text({ buffer });
+
+				buffer.clear();
+			}
+			else {
+				buffer += chr;
+			}
 		}
 
 		close(std::get<1>(rc));
