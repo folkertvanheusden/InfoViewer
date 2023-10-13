@@ -4,6 +4,7 @@ infoviewer
 View all kinds of information.
 Sources can be mqtt, output from a program (one-shot or tail) and static texts.
 Data from sources can be evaluated if it is json.
+The layout of the screen is fully customizable.
 
 
 build
