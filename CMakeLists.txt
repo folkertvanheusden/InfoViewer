@@ -8,7 +8,9 @@ set(CMAKE_BUILD_TYPE Debug)
 
 add_executable(
   infoviewer
+  container.cpp
   error.cpp
+  feeds.cpp
   formatters.cpp
   infoviewer.cpp
   io.cpp
