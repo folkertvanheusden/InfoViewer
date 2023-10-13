@@ -1192,7 +1192,7 @@ int main(int argc, char *argv[])
 		feeds.push_back(f);
 	}
 
-	for(;!do_exit;) {
+	while(!do_exit) {
 		if (grid) {
 			for(int cy=0; cy<n_rows; cy++)
 				lineRGBA(screen, 0, cy * ysteps, w, cy * ysteps, 255, 255, 255, 255);
@@ -1228,6 +1228,11 @@ int main(int argc, char *argv[])
 			if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_q) {
 				do_exit = true;
 				break;
+			}
+
+			if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+				SDL_SetRenderDrawColor(screen, 0, 0, 0, 255);
+				SDL_RenderClear(screen);
 			}
 		}
 	}
