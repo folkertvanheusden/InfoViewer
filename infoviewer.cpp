@@ -737,14 +737,15 @@ public:
 		for(;!do_exit;) {
 			usleep(10000);
 
+			lock.lock();
+
 			if (total_w > 0) {
-				lock.lock();
 
 				render_x += scroll_speed;
 				render_x %= total_w;
-
-				lock.unlock();
 			}
+
+			lock.unlock();
 		}
 	}
 };
