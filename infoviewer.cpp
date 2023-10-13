@@ -254,6 +254,9 @@ public:
 
 		// field:in_seperator:out_seperator:fieldnr,fieldnr,fieldnr,...
 		if (cmd_parts.at(0) == "field") {
+			if (cmd_parts.size() != 4)
+				error_exit(false, "\"%s\": fields missing", cmd.c_str());
+
 			auto in_parts    = split(in, cmd_parts.at(1));
 
 			auto field_parts = split(cmd_parts.at(3), ",");
@@ -274,6 +277,9 @@ public:
 		}
 		// regex:seperator:re...
 		else if (cmd_parts.at(0) == "regex") {
+			if (cmd_parts.size() != 3)
+				error_exit(false, "\"%s\": fields missing", cmd.c_str());
+
 			std::regex  regexp(cmd_parts.at(2));
 			std::smatch m;
 
@@ -281,7 +287,6 @@ public:
 
 			bool first = true;
 
-			printf("%s\n", in.c_str());
 			for(auto & field : m) {
 				if (first)
 					first = false;
@@ -336,10 +341,6 @@ public:
 
 		if (processing)
 			out += do_cmd(in, cmd);
-
-		printf("ESCAPED\n");
-		printf("\t%s\n", in.c_str());
-		printf("\t%s\n", out.c_str());
 
 		return out;
 	}
