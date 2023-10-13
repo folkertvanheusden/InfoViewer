@@ -5,6 +5,8 @@
 #include <math.h>
 #include <mosquitto.h>
 #include <mutex>
+#include <optional>
+#include <regex>
 #include <signal.h>
 #include <stdarg.h>
 #include <thread>
@@ -216,22 +218,134 @@ TTF_Font * load_font(const std::string & filename, unsigned int font_height, boo
         return font;
 }
 
-class text_formatter
+class base_text_formatter
 {
 public:
-	text_formatter() {
+	base_text_formatter() {
+	}
+
+	virtual ~base_text_formatter() {
+	}
+
+	virtual std::string process(const std::string & in) = 0;
+};
+
+class text_formatter : public base_text_formatter
+{
+private:
+	const std::optional<std::string> format;
+	size_t len { 0 };
+
+public:
+	text_formatter(const std::optional<std::string> & format) :
+			format(format)
+	{
+		if (format.has_value())
+			len = format.value().size();
 	}
 
 	virtual ~text_formatter() {
 	}
 
-	virtual std::string process(const std::string & in)
+	std::string do_cmd(const std::string & in, const std::string & cmd) {
+		std::string out;
+
+		auto cmd_parts = split(cmd, ":");
+
+		// field:in_seperator:out_seperator:fieldnr,fieldnr,fieldnr,...
+		if (cmd_parts.at(0) == "field") {
+			auto in_parts    = split(in, cmd_parts.at(1));
+
+			auto field_parts = split(cmd_parts.at(3), ",");
+
+			bool first       = true;
+
+			for(auto & field : field_parts) {
+				if (first)
+					first = false;
+				else
+					out += cmd_parts.at(2);
+
+				size_t field_nr = atoi(field.c_str());
+
+				if (field_nr < in_parts.size())
+					out += in_parts[field_nr];
+			}
+		}
+		// regex:seperator:re...
+		else if (cmd_parts.at(0) == "regex") {
+			std::regex  regexp(cmd_parts.at(2));
+			std::smatch m;
+
+			std::regex_search(in, m, regexp);
+
+			bool first = true;
+
+			printf("%s\n", in.c_str());
+			for(auto & field : m) {
+				if (first)
+					first = false;
+				else {
+					out += cmd_parts.at(1);
+
+					out += field;
+				}
+			}
+		}
+		else {
+			fprintf(stderr, "Escape %s not known\n", cmd_parts[0].c_str());
+		}
+
+		return out;
+	}
+
+	std::string process(const std::string & in) override
 	{
-		return in;
+		if (format.has_value() == false)
+			return in;
+
+		std::string out;
+		std::string cmd;
+
+		size_t pos = 0;
+
+		bool processing = false;
+
+		while(pos < len) {
+			if (processing) {
+				if (format.value().at(pos) == '$') {
+					out += do_cmd(in, cmd);
+
+					processing = false;
+				}
+				else {
+					cmd += format.value().at(pos);
+				}
+			}
+			else if (format.value().at(pos) == '$') {
+				processing = true;
+
+				cmd.clear();
+			}
+			else {
+				out += format.value().at(pos);
+			}
+
+			pos++;
+		}
+
+		if (processing)
+			out += do_cmd(in, cmd);
+
+		printf("ESCAPED\n");
+		printf("\t%s\n", in.c_str());
+		printf("\t%s\n", out.c_str());
+
+		return out;
 	}
 };
 
-class json_formatter : public text_formatter
+class json_formatter : public base_text_formatter
 {
 private:
 	const std::string format_string;
@@ -324,13 +438,13 @@ protected:
 	int             total_w   { 0 };
 	int             h         { 0 };
 	SDL_Color       col       { 0, 0, 0, 0 };
-	text_formatter *const fmt { nullptr };
+	base_text_formatter *const fmt { nullptr };
 	const int       clear_after { -1 };
 	time_t          most_recent_update { 0 };
 	std::thread    *th        { nullptr };
 
 public:
-	container(SDL_Renderer *const renderer, const std::string & font_file, const int font_height, const int max_width, text_formatter *const fmt, const int clear_after) : renderer(renderer), max_width(max_width), fmt(fmt), clear_after(clear_after)
+	container(SDL_Renderer *const renderer, const std::string & font_file, const int font_height, const int max_width, base_text_formatter *const fmt, const int clear_after) : renderer(renderer), max_width(max_width), fmt(fmt), clear_after(clear_after)
 	{
 		assert(renderer);
 
@@ -464,7 +578,7 @@ public:
 class text_box : public container
 {
 public:
-	text_box(SDL_Renderer * const renderer, const std::string & font_file, const int font_height, const int r, const int g, const int b, const int max_width, text_formatter *const fmt, const int clear_after) : container(renderer, font_file, font_height, max_width, fmt, clear_after)
+	text_box(SDL_Renderer * const renderer, const std::string & font_file, const int font_height, const int r, const int g, const int b, const int max_width, base_text_formatter *const fmt, const int clear_after) : container(renderer, font_file, font_height, max_width, fmt, clear_after)
 	{
 		col.r = r;
 		col.g = g;
@@ -541,7 +655,7 @@ private:
 	std::thread *th { nullptr };
 
 public:
-	scroller(SDL_Renderer * const renderer, const std::string & font_file, const int scroll_speed, const int font_height, const int r, const int g, const int b, const int max_width, text_formatter *const fmt, const int clear_after) : container(renderer, font_file, font_height, max_width, fmt, clear_after), scroll_speed(scroll_speed)
+	scroller(SDL_Renderer * const renderer, const std::string & font_file, const int scroll_speed, const int font_height, const int r, const int g, const int b, const int max_width, base_text_formatter *const fmt, const int clear_after) : container(renderer, font_file, font_height, max_width, fmt, clear_after), scroll_speed(scroll_speed)
 	{
 		assert(renderer);
 
@@ -920,8 +1034,10 @@ int main(int argc, char *argv[])
 	for(size_t i=0; i<n_instances; i++) {
 		const libconfig::Setting & instance = instances[i];
 
-		std::string formatter_type = cfg_str(instance, "formatter", "json or as-is", false, "as-is");
-		text_formatter *tf { nullptr };
+		std::string formatter_type = cfg_str(instance, "formatter", "json, text or as-is", false, "as-is");
+		base_text_formatter *tf { nullptr };
+
+		std::string format_string;
 
 		if (formatter_type == "json") {
 			std::string format_string = cfg_str(instance, "format-string", "json", false, "");
@@ -929,7 +1045,12 @@ int main(int argc, char *argv[])
 			tf = new json_formatter(format_string);
 		}
 		else if (formatter_type == "as-is") {
-			tf = new text_formatter();
+			tf = new text_formatter({ });
+		}
+		else if (formatter_type == "text") {
+			std::string format_string = cfg_str(instance, "format-string", "text", false, "");
+
+			tf = new text_formatter(format_string);
 		}
 		else {
 			error_exit(false, "\"format-string %s\" unknown", formatter_type.c_str());
@@ -989,23 +1110,23 @@ int main(int argc, char *argv[])
 		}
 
 		container_t entry { 0 };
-		entry.c = c;
-		entry.ct = ct;
-		entry.font_r = fg_r;
-		entry.font_g = fg_g;
-		entry.font_b = fg_b;
-		entry.bg_r = bg_r;
-		entry.bg_g = bg_g;
-		entry.bg_b = bg_b;
-		entry.b_r = b_r;
-		entry.b_g = b_g;
-		entry.b_b = b_b;
-		entry.bg_fill = bg_fill;
-		entry.x = x;
-		entry.y = y;
-		entry.w = w;
-		entry.h = h;
-		entry.border = cfg_bool(instance, "border", "border", false, true);
+		entry.c        = c;
+		entry.ct       = ct;
+		entry.font_r   = fg_r;
+		entry.font_g   = fg_g;
+		entry.font_b   = fg_b;
+		entry.bg_r     = bg_r;
+		entry.bg_g     = bg_g;
+		entry.bg_b     = bg_b;
+		entry.b_r      = b_r;
+		entry.b_g      = b_g;
+		entry.b_b      = b_b;
+		entry.bg_fill  = bg_fill;
+		entry.x        = x;
+		entry.y        = y;
+		entry.w        = w;
+		entry.h        = h;
+		entry.border   = cfg_bool(instance, "border", "border", false, true);
 		entry.center_h = center_h;
 		entry.center_v = center_v;
 
