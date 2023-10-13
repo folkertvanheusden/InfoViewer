@@ -629,11 +629,10 @@ public:
 			int    rc     = SDL_QueryTexture(p, &format, &access, &w, &h);
 			assert(rc == 0);
 
-			int     cur_x = center_h ? put_x + put_w / 2 - biggest_w / 2 : put_x;
+			int     cur_x = center_h ? put_x + put_w / 2 - w / 2 : put_x;
 			int     cur_y = center_v ? put_y + biggest_h / 4 : put_y;
 
-
-			SDL_Rect dest { cur_x, cur_y, biggest_w, h };
+			SDL_Rect dest { cur_x, cur_y, w, h };
 			SDL_Rect src  { 0, 0, w, h };
 
 			SDL_RenderCopy(sd->screen, p, &src, &dest);
