@@ -651,11 +651,16 @@ public:
 class scroller : public container
 {
 private:
-	int render_x { 0 }, scroll_speed { 1 };
+	int  render_x     { 0     };
+	int  scroll_speed { 1     };
+	bool center_v     { false };
+
 	std::thread *th { nullptr };
 
 public:
-	scroller(SDL_Renderer * const renderer, const std::string & font_file, const int scroll_speed, const int font_height, const int r, const int g, const int b, const int max_width, base_text_formatter *const fmt, const int clear_after) : container(renderer, font_file, font_height, max_width, fmt, clear_after), scroll_speed(scroll_speed)
+	scroller(SDL_Renderer * const renderer, const std::string & font_file, const int scroll_speed, const int font_height, const int r, const int g, const int b, const int max_width, base_text_formatter *const fmt, const int clear_after, const bool center_v) :
+		container(renderer, font_file, font_height, max_width, fmt, clear_after), scroll_speed(scroll_speed),
+		center_v(center_v)
 	{
 		assert(renderer);
 
@@ -703,7 +708,14 @@ public:
 					SDL_Rect cur_src { cur_render_x, 0, w - cur_render_x, h };
 					cur_render_x = 0;
 
-					SDL_Rect dest_temp { dest.x, dest.y, std::min(dest.w, cur_src.w), sd->ysteps * put_h };
+					SDL_Rect dest_temp { 0 };
+
+					if (center_v) {
+						dest_temp = { dest.x, dest.y + sd->ysteps * put_h / 2 - h / 2, std::min(dest.w, cur_src.w), sd->ysteps * put_h };
+					}
+					else {
+						dest_temp = { dest.x, dest.y, std::min(dest.w, cur_src.w), sd->ysteps * put_h };
+					}
 
 					SDL_RenderCopy(sd->screen, p, &cur_src, &dest_temp);
 					dest.x += cur_src.w;
@@ -1103,7 +1115,7 @@ int main(int argc, char *argv[])
 		else if (type == "scroller") {
 			ct = ct_scroller;
 			int scroll_speed = cfg_int(instance, "scroll-speed", "pixel count", true, 1);
-			c = new scroller(screen, font, scroll_speed, ysteps * font_height, fg_r, fg_g, fg_b, max_width * xsteps, tf, clear_after);
+			c = new scroller(screen, font, scroll_speed, ysteps * font_height, fg_r, fg_g, fg_b, max_width * xsteps, tf, clear_after, center_v);
 		}
 		else {
 			error_exit(false, "\"type %s\" unknown", type.c_str());
