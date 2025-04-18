@@ -116,18 +116,14 @@ void exec_feed::operator()()
 
 	while(!do_exit) {
 		auto rc = exec_with_pipe(cmd, ".", 80, 25, -1, true, true);
-
 		char buffer[65536] { 0 };
-
 		int n_chars = read(std::get<1>(rc), buffer, sizeof(buffer) - 1);
-
 		close(std::get<1>(rc));
 
 		kill(SIGTERM, std::get<0>(rc));
 
 		if (n_chars <= 0)
 			break;
-
 		buffer[n_chars] = 0x00;
 
 		for(;;) {
