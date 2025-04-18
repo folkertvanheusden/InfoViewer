@@ -159,8 +159,11 @@ int main(int argc, char *argv[])
 	mosquitto_lib_init();
 
 	libconfig::Config cfg;
-
+#if (LIBCONFIGXX_VER_MAJOR >= 1 && LIBCONFIGXX_VER_MINOR >= 7)
+	cfg.setOptions(libconfig::Config::Option::OptionAutoConvert);
+#else
 	cfg.setOptions(libconfig::Setting::Option::OptionAutoConvert);
+#endif
 
         try {
                 cfg.readFile(argv[1]);
