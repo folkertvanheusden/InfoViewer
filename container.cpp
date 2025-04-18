@@ -151,6 +151,8 @@ std::pair<int, int> container::set_text(const std::vector<std::string> & in_)
 	}
 	ttf_lock.unlock();
 
+	// swap
+
 	lock.lock();
 
 	std::vector<SDL_Texture *> old = surfaces;
@@ -162,6 +164,8 @@ std::pair<int, int> container::set_text(const std::vector<std::string> & in_)
 	most_recent_update = time(nullptr);
 
 	lock.unlock();
+
+	// delete old
 
 	for(auto & s : old)
 		SDL_DestroyTexture(s);
