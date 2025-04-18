@@ -25,18 +25,18 @@ private:
 	TTF_Font *font { nullptr };
 
 protected:
-	SDL_Renderer   *renderer  { nullptr };
-	const int       max_width { 0 };
+	SDL_Renderer   *renderer       { nullptr    };
+	const int       max_width      { 0          };
 	std::mutex      lock;
 	std::vector<SDL_Texture *> surfaces;
 	std::string     text;
-	int             total_w   { 0 };
-	int             h         { 0 };
-	SDL_Color       col       { 0, 0, 0, 0 };
-	base_text_formatter *const fmt { nullptr };
-	const int       clear_after { -1 };
-	time_t          most_recent_update { 0 };
-	std::thread    *th        { nullptr };
+	int             total_w        { 0          };
+	int             h              { 0          };
+	SDL_Color       col            { 0, 0, 0, 0 };
+	base_text_formatter *const fmt { nullptr    };
+	const int       clear_after    { -1         };
+	time_t          most_recent_update { 0      };
+	std::thread    *th             { nullptr    };
 
 public:
 	container(SDL_Renderer *const renderer, const std::string & font_file, const int font_height, const int max_width, base_text_formatter *const fmt, const int clear_after);
@@ -44,7 +44,8 @@ public:
 
 	void operator()();
 
-	virtual std::pair<int, int> set_text(const std::vector<std::string> & in_);
+	virtual std::pair<int, int> set_text  (const std::vector<std::string> & in_);
+	virtual std::pair<int, int> set_pixels(const uint8_t *const rgb_pixels, const int width, const int height);
 
 	virtual void put_static(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h, const bool center_h, const bool center_v) = 0;
 

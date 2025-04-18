@@ -18,6 +18,8 @@ packages required:
 * libmosquitto-dev
 * libconfig++-dev
 * libjansson-dev
+* libcurl4-gnutls-dev
+* libturbojpeg0-dev
 
 The example uses fonts from fonts-freefont-ttf
 

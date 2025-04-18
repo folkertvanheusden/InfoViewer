@@ -8,6 +8,7 @@
 #include <vector>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL2_gfxPrimitives.h>
+#include <SDL2/SDL2_rotozoom.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 
@@ -171,6 +172,50 @@ std::pair<int, int> container::set_text(const std::vector<std::string> & in_)
 		SDL_DestroyTexture(s);
 
 	return { total_w, h };
+}
+
+SDL_Surface *create_surface_from_rgb_pixels(const uint8_t *const pixels, const int width, const int height)
+{
+    int depth = 24;
+    int pitch = width * 3;
+
+    uint32_t rmask = 0x0000FF;
+    uint32_t gmask = 0x00FF00;
+    uint32_t bmask = 0xFF0000;
+    uint32_t amask = 0;  // n.a.
+
+    return SDL_CreateRGBSurfaceFrom((void *)pixels, width, height, depth, pitch, rmask, gmask, bmask, amask);
+}
+
+std::pair<int, int> container::set_pixels(const uint8_t *const rgb_pixels, const int width, const int height)
+{
+	SDL_Surface *input = create_surface_from_rgb_pixels(rgb_pixels, width, height);
+	if (width > max_width) {
+		float factor = width / max_width;
+		SDL_Surface *temp = shrinkSurface(input, factor, factor);
+		SDL_FreeSurface(input);
+		input = temp;
+	}
+	std::vector<SDL_Texture *> temp_new { SDL_CreateTextureFromSurface(renderer, input) };
+
+	// swap
+	lock.lock();
+
+	std::vector<SDL_Texture *> old = surfaces;
+
+	surfaces = temp_new;
+	total_w  = width;
+	h        = height;
+
+	most_recent_update = time(nullptr);
+
+	lock.unlock();
+
+	// delete old
+	for(auto & s : old)
+		SDL_DestroyTexture(s);
+
+	return { width, height };
 }
 
 text_box::text_box(SDL_Renderer * const renderer, const std::string & font_file, const int font_height, const int r, const int g, const int b, const int max_width, base_text_formatter *const fmt, const int clear_after) : container(renderer, font_file, font_height, max_width, fmt, clear_after)

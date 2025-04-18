@@ -379,6 +379,11 @@ int main(int argc, char *argv[])
 
 			f = new static_feed(text, c);
 		}
+		else if (feed_type == "mjpeg") {
+			std::string url = cfg_str(s_feed, "url", "MJPEG url", false, "my url");
+
+			f = new mjpeg_feed(url, c);
+		}
 		else {
 			error_exit(false, "\"feed-type %s\" unknown", feed_type.c_str());
 		}

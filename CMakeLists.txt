@@ -11,6 +11,7 @@ add_executable(
   container.cpp
   error.cpp
   feeds.cpp
+  feeds_mjpeg.cpp
   formatters.cpp
   infoviewer.cpp
   io.cpp
@@ -59,6 +60,16 @@ pkg_check_modules(JANSSON REQUIRED jansson)
 target_link_libraries(infoviewer ${JANSSON_LIBRARIES})
 target_include_directories(infoviewer PUBLIC ${JANSSON_INCLUDE_DIRS})
 target_compile_options(infoviewer PUBLIC ${JANSSON_CFLAGS_OTHER})
+
+pkg_check_modules(CURL REQUIRED libcurl)
+target_link_libraries(infoviewer ${CURL_LIBRARIES})
+target_include_directories(infoviewer PUBLIC ${CURL_INCLUDE_DIRS})
+target_compile_options(infoviewer PUBLIC ${CURL_CFLAGS_OTHER})
+
+pkg_check_modules(TURBOJPEG REQUIRED libturbojpeg)
+target_link_libraries(infoviewer ${TURBOJPEG_LIBRARIES})
+target_include_directories(infoviewer PUBLIC ${TURBOJPEG_INCLUDE_DIRS})
+target_compile_options(infoviewer PUBLIC ${TURBOJPEG_CFLAGS_OTHER})
 
 # set(CMAKE_INTERPROCEDURAL_OPTIMIZATION True)
 set(CMAKE_CXX_FLAGS "-Ofast")

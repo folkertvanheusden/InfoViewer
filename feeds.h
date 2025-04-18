@@ -73,3 +73,15 @@ public:
 
 	void operator()() override;
 };
+
+class mjpeg_feed : public feed
+{
+private:
+	const std::string url;
+
+public:
+	mjpeg_feed(const std::string & url, container *const c);
+	virtual ~mjpeg_feed();
+
+	void operator()() override;
+};
