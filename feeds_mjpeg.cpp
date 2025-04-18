@@ -16,12 +16,13 @@ bool read_JPEG_memory(unsigned char *in, int n_bytes_in, int *w, int *h, unsigne
 {
 	bool ok = true;
 
+	*w = *h = 0;
 	int jpeg_subsamp = 0;
 	if (tjDecompressHeader2(jpegDecompressor, in, n_bytes_in, w, h, &jpeg_subsamp) == -1)
 		return false;
 
 	*pixels = (unsigned char *)malloc(*w * *h * 3);
-	if (tjDecompress2(jpegDecompressor, in, n_bytes_in, *pixels, *w, 0/*pitch*/, *h, TJPF_RGB, TJFLAG_FASTDCT) == -1) {
+	if (tjDecompress(jpegDecompressor, in, n_bytes_in, *pixels, *w, 0/*pitch*/, *h, TJPF_RGB, TJFLAG_FASTDCT) == -1) {
 		free(*pixels);
 		*pixels = nullptr;
 		ok = false;
