@@ -186,7 +186,7 @@ int main(int argc, char *argv[])
 
 	int  display_nr  = 0;
 
-	{
+	try {
 		const libconfig::Setting & global = root.lookup("global");
 
 		n_columns = cfg_int(global, "n-columns", "number of columns", true, 80);
@@ -199,6 +199,10 @@ int main(int argc, char *argv[])
 		create_h = cfg_int(global, "window-h", "when not full screen, window height", true, 480);
 
 		display_nr = cfg_int(global, "display-nr", "with multiple monitors, use this monitor", true, 1);
+	}
+	catch(libconfig::SettingNotFoundException & e) {
+                fprintf(stderr, "Configuration group \"global\" not found!\n");
+                return 1;
 	}
 
 	SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
