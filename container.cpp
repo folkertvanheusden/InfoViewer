@@ -197,6 +197,7 @@ std::pair<int, int> container::set_pixels(const uint8_t *const rgb_pixels, const
 		input = temp;
 	}
 	std::vector<SDL_Texture *> temp_new { SDL_CreateTextureFromSurface(renderer, input) };
+	SDL_FreeSurface(input);
 
 	// swap
 	lock.lock();
