@@ -12,9 +12,6 @@
 
 bool read_JPEG_memory(tjhandle jpeg_decompressor, unsigned char *in, int n_bytes_in, int *w, int *h, unsigned char **pixels)
 {
-	bool ok = true;
-
-	*w = *h = 0;
 	int jpeg_subsamp = 0;
 	if (tjDecompressHeader2(jpeg_decompressor, in, n_bytes_in, w, h, &jpeg_subsamp) == -1)
 		return false;
@@ -23,10 +20,10 @@ bool read_JPEG_memory(tjhandle jpeg_decompressor, unsigned char *in, int n_bytes
 	if (tjDecompress2(jpeg_decompressor, in, n_bytes_in, *pixels, *w, 0/*pitch*/, *h, TJPF_RGB, TJFLAG_FASTDCT) == -1) {
 		free(*pixels);
 		*pixels = nullptr;
-		ok = false;
+		return false;
 	}
 
-	return ok;
+	return true;
 }
 
 typedef struct
@@ -166,6 +163,11 @@ process:
 		if (read_JPEG_memory(w->jpeg_decompressor, w->data, w->req_len, &dw, &dh, &temp)) {
 			w->c->set_pixels(temp, dw, dh);
 			free(temp);
+
+			if (w->first) {
+				w->first = false;
+				printf("%dx%d\n", dw, dh);
+			}
 		}
 
 		size_t left = w -> n - w -> req_len;
@@ -212,6 +214,8 @@ mjpeg_feed::~mjpeg_feed()
 void mjpeg_feed::operator()()
 {
 	constexpr const int timeout = 5000;
+
+	auto decompressor = tjInitDecompress();
 
 	for(;;)
 	{
@@ -265,6 +269,7 @@ void mjpeg_feed::operator()()
 		w -> data = NULL;
 		w -> n = 0;
 		w -> headers = &wh;
+		w -> jpeg_decompressor = decompressor;
 		curl_easy_setopt(ch, CURLOPT_WRITEDATA, w);
 
 		curl_easy_setopt(ch, CURLOPT_XFERINFODATA, w);
