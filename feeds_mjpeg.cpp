@@ -10,19 +10,17 @@
 #include "feeds.h"
 
 
-tjhandle jpegDecompressor { tjInitDecompress() };
-
-bool read_JPEG_memory(unsigned char *in, int n_bytes_in, int *w, int *h, unsigned char **pixels)
+bool read_JPEG_memory(tjhandle jpeg_decompressor, unsigned char *in, int n_bytes_in, int *w, int *h, unsigned char **pixels)
 {
 	bool ok = true;
 
 	*w = *h = 0;
 	int jpeg_subsamp = 0;
-	if (tjDecompressHeader2(jpegDecompressor, in, n_bytes_in, w, h, &jpeg_subsamp) == -1)
+	if (tjDecompressHeader2(jpeg_decompressor, in, n_bytes_in, w, h, &jpeg_subsamp) == -1)
 		return false;
 
 	*pixels = (unsigned char *)malloc(*w * *h * 3);
-	if (tjDecompress(jpegDecompressor, in, n_bytes_in, *pixels, *w, 0/*pitch*/, *h, TJPF_RGB, TJFLAG_FASTDCT) == -1) {
+	if (tjDecompress2(jpeg_decompressor, in, n_bytes_in, *pixels, *w, 0/*pitch*/, *h, TJPF_RGB, TJFLAG_FASTDCT) == -1) {
 		free(*pixels);
 		*pixels = nullptr;
 		ok = false;
@@ -99,6 +97,7 @@ typedef struct
 	uint8_t       *data;
 	size_t         n;
 	size_t         req_len;
+	tjhandle       jpeg_decompressor;
 } work_data_t;
 
 static int xfer_callback(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)
@@ -164,7 +163,7 @@ process:
 		int            dw   = 0;
 		int            dh   = 0;
 		unsigned char *temp = NULL;
-		if (read_JPEG_memory(w->data, w->req_len, &dw, &dh, &temp)) {
+		if (read_JPEG_memory(w->jpeg_decompressor, w->data, w->req_len, &dw, &dh, &temp)) {
 			w->c->set_pixels(temp, dw, dh);
 			free(temp);
 		}
