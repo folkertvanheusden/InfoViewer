@@ -241,7 +241,7 @@ int main(int argc, char *argv[])
 	for(size_t i=0; i<n_instances; i++) {
 		const libconfig::Setting & instance = instances[i];
 
-		std::string formatter_type = cfg_str(instance, "formatter", "json, text or as-is", false, "as-is");
+		std::string formatter_type = cfg_str(instance, "formatter", "json, text, value or as-is", false, "as-is");
 		base_text_formatter *tf { nullptr };
 
 		std::string format_string;
@@ -258,6 +258,11 @@ int main(int argc, char *argv[])
 			std::string format_string = cfg_str(instance, "format-string", "text", false, "");
 
 			tf = new text_formatter(format_string);
+		}
+		else if (formatter_type == "value") {
+			int n_digits = cfg_int(instance, "n-digits", "number of digits (0 for integer)", false, 0);
+
+			tf = new value_formatter(n_digits);
 		}
 		else {
 			error_exit(false, "\"format-string %s\" unknown", formatter_type.c_str());

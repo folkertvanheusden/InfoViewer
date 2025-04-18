@@ -37,3 +37,16 @@ public:
 
 	std::string process(const std::string & in) override;
 };
+
+class value_formatter : public base_text_formatter
+{
+private:
+	const int n_digits { 0 };
+	size_t    len      { 0 };
+
+public:
+	value_formatter(const int n_digits);
+	virtual ~value_formatter();
+
+	std::string process(const std::string & in) override;
+};

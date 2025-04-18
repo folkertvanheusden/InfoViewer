@@ -192,3 +192,26 @@ std::string json_formatter::process(const std::string & in)
 
 	return out;
 }
+
+value_formatter::value_formatter(const int n_digits) : n_digits(n_digits)
+{
+}
+
+value_formatter::~value_formatter() {
+}
+
+std::string value_formatter::process(const std::string & in)
+{
+	try {
+		double value = std::stod(in);
+
+		if (n_digits == 0)
+			return myformat("%d", value);
+
+		return myformat("%.*f", n_digits, value);
+	}
+	catch(...) {
+	}
+
+	return in;
+}

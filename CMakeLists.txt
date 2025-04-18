@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 3.7)
 
 project(infoviewer)
 
-add_compile_options(-Wall -ffast-math -fno-inline)
+add_compile_options(-Wall)
 
-set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE RelWithDebInfo)
 
 add_executable(
   infoviewer
@@ -71,8 +71,4 @@ target_link_libraries(infoviewer ${TURBOJPEG_LIBRARIES})
 target_include_directories(infoviewer PUBLIC ${TURBOJPEG_INCLUDE_DIRS})
 target_compile_options(infoviewer PUBLIC ${TURBOJPEG_CFLAGS_OTHER})
 
-# set(CMAKE_INTERPROCEDURAL_OPTIMIZATION True)
-set(CMAKE_CXX_FLAGS "-Ofast")
-
-set(CMAKE_BUILD_TYPE Debug)
-add_compile_options(-Wall -pedantic)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION True)
