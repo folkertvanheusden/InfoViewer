@@ -14,6 +14,7 @@
 #include <SDL2/SDL2_gfxPrimitives.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
+#include <sys/wait.h>
 
 #include "error.h"
 #include "feeds.h"
@@ -25,7 +26,10 @@ std::atomic_bool do_exit { false };
 
 void sigh(int s)
 {
-	do_exit = true;
+	if (s == SIGTERM)
+		do_exit = true;
+	else if (s == SIGCHLD)
+		wait(nullptr);
 }
 
 std::string cfg_str(const libconfig::Setting & cfg, const std::string & key, const char *descr, const bool optional, const std::string & def)
@@ -141,6 +145,7 @@ typedef struct {
 int main(int argc, char *argv[])
 {
 	signal(SIGTERM, sigh);
+	signal(SIGCHLD, sigh);
 
 	if (argc != 2) {
 		fprintf(stderr, "Configuration file parameter missing\n");
