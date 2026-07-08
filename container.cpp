@@ -72,22 +72,16 @@ void container::operator()()
 
 			lock.lock();
 			if (most_recent_update != 0 && now - most_recent_update >= clear_after) {
-				std::vector<SDL_Texture *> old = surfaces;
+				for(auto & s : surfaces)
+					SDL_DestroyTexture(s);
 				surfaces.clear();
 
 				total_w = 0;
 				h       = 0;
 
 				most_recent_update = 0;
-
-				lock.unlock();
-
-				for(auto & s : old)
-					SDL_DestroyTexture(s);
 			}
-			else {
-				lock.unlock();
-			}
+			lock.unlock();
 		}
 	}
 }
@@ -164,12 +158,13 @@ std::pair<int, int> container::set_text(const std::vector<std::string> & in_)
 
 	most_recent_update = time(nullptr);
 
-	lock.unlock();
+//	lock.unlock();
 
 	// delete old
 
 	for(auto & s : old)
 		SDL_DestroyTexture(s);
+	lock.unlock();
 
 	return { total_w, h };
 }
