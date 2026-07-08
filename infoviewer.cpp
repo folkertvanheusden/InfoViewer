@@ -427,8 +427,7 @@ int main(int argc, char *argv[])
 		SDL_Delay(10);
 
 		SDL_Event event { 0 };
-		if (SDL_PollEvent(&event))
-		{
+		if (SDL_PollEvent(&event)) {
 			if (event.type == SDL_QUIT) {
 				do_exit = true;
 				break;

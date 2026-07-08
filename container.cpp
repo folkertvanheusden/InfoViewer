@@ -28,7 +28,7 @@ TTF_Font * load_font(const std::string & filename, unsigned int font_height, boo
 {
         char *const real_path = realpath(filename.c_str(), NULL);
 
-        ttf_lock.lock();
+	std::unique_lock<std::mutex> lck(ttf_lock);
 
         TTF_Font *font = TTF_OpenFont(real_path, font_height);
 	if (!font)
@@ -36,8 +36,6 @@ TTF_Font * load_font(const std::string & filename, unsigned int font_height, boo
 
         if (!fast_rendering)
                 TTF_SetFontHinting(font, TTF_HINTING_LIGHT);
-
-        ttf_lock.unlock();
 
         free(real_path);
 
@@ -70,7 +68,7 @@ void container::operator()()
 
 			time_t now = time(nullptr);
 
-			lock.lock();
+			std::unique_lock<std::mutex> lck(lock);
 			if (most_recent_update != 0 && now - most_recent_update >= clear_after) {
 				for(auto & s : surfaces)
 					SDL_DestroyTexture(s);
@@ -81,7 +79,6 @@ void container::operator()()
 
 				most_recent_update = 0;
 			}
-			lock.unlock();
 		}
 	}
 }
@@ -116,7 +113,7 @@ std::pair<int, int> container::set_text(const std::vector<std::string> & in_)
 	// render new text
 	int new_total_w = 0, new_h = 0;
 
-	ttf_lock.lock();
+	std::unique_lock<std::mutex> ttf_klck(ttf_lock);
 	for(auto line : in) {
 		int text_w = 0;
 		int dummy  = 0;
@@ -144,27 +141,17 @@ std::pair<int, int> container::set_text(const std::vector<std::string> & in_)
 			SDL_FreeSurface(new_s);
 		}
 	}
-	ttf_lock.unlock();
 
-	// swap
+	std::unique_lock<std::mutex> lck(lock);
 
-	lock.lock();
-
-	std::vector<SDL_Texture *> old = surfaces;
+	for(auto & s : surfaces)
+		SDL_DestroyTexture(s);
 
 	surfaces = temp_new;
 	total_w = new_total_w;
 	h = new_h;
 
 	most_recent_update = time(nullptr);
-
-//	lock.unlock();
-
-	// delete old
-
-	for(auto & s : old)
-		SDL_DestroyTexture(s);
-	lock.unlock();
 
 	return { total_w, h };
 }
@@ -194,22 +181,16 @@ std::pair<int, int> container::set_pixels(const uint8_t *const rgb_pixels, const
 	std::vector<SDL_Texture *> temp_new { SDL_CreateTextureFromSurface(renderer, input) };
 	SDL_FreeSurface(input);
 
-	// swap
-	lock.lock();
+	std::unique_lock<std::mutex> lck(lock);
 
-	std::vector<SDL_Texture *> old = surfaces;
+	for(auto & s : surfaces)
+		SDL_DestroyTexture(s);
 
 	surfaces = temp_new;
 	total_w  = width;
 	h        = height;
 
 	most_recent_update = time(nullptr);
-
-	lock.unlock();
-
-	// delete old
-	for(auto & s : old)
-		SDL_DestroyTexture(s);
 
 	return { width, height };
 }
@@ -232,7 +213,7 @@ void text_box::put_scroller(screen_descriptor_t *const sd, const int x, const in
 
 void text_box::put_static(screen_descriptor_t *const sd, const int x, const int y, const int w, const int h, const bool center_h, const bool center_v)
 {
-	lock.lock();
+	std::unique_lock<std::mutex> lck(lock);
 
 	int biggest_w = 0;
 	int biggest_h = 0;
@@ -278,8 +259,6 @@ void text_box::put_static(screen_descriptor_t *const sd, const int x, const int 
 		if (work_h <= 0)
 			break;
 	}
-
-	lock.unlock();
 }
 
 scroller::scroller(SDL_Renderer * const renderer, const std::string & font_file, const int scroll_speed, const int font_height, const int r, const int g, const int b, const int max_width, base_text_formatter *const fmt, const int clear_after, const bool center_v) :
@@ -308,7 +287,7 @@ void scroller::put_static(screen_descriptor_t *const sd, const int x, const int 
 
 void scroller::put_scroller(screen_descriptor_t *const sd, const int x, const int y, const int put_w, const int put_h)
 {
-	lock.lock();
+	std::unique_lock<std::mutex> lck(lock);
 
 	if (!surfaces.empty()) {
 		SDL_Rect dest { x * sd->xsteps + 1, y * sd->ysteps + 1, sd->xsteps * put_w, sd->ysteps * put_h };
@@ -351,8 +330,6 @@ void scroller::put_scroller(screen_descriptor_t *const sd, const int x, const in
 		}
 		while(pixels_to_do > 0);
 	}
-
-	lock.unlock();
 }
 
 void scroller::operator()() {
@@ -361,14 +338,10 @@ void scroller::operator()() {
 	while(!do_exit) {
 		usleep(10000);
 
-		lock.lock();
-
+		std::unique_lock<std::mutex> lck(lock);
 		if (total_w > 0) {
-
 			render_x += scroll_speed;
 			render_x %= total_w;
 		}
-
-		lock.unlock();
 	}
 }
